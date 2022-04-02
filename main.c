@@ -1,0 +1,340 @@
+/*******************************************************************************
+* File Name: main.c
+*
+* Description:
+* This file contains the starting point of Bluetooth LE Voice Remote application.
+* The wiced_bt_stack_init() registers for Bluetooth events in this main function.
+* The Bluetooth Management callback manages the Bluetooth events and the
+* application developer can customize the functionality and behavior depending on
+* the Bluetooth events. The Bluetooth Management callback acts like a
+* Finite State Machine (FSM) for the SoC.
+*
+* Related Document: See README.md
+*
+*******************************************************************************
+* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
+*
+* This software, including source code, documentation and related
+* materials ("Software") is owned by Cypress Semiconductor Corporation
+* or one of its affiliates ("Cypress") and is protected by and subject to
+* worldwide patent protection (United States and foreign),
+* United States copyright laws and international treaty provisions.
+* Therefore, you may use this Software only as provided in the license
+* agreement accompanying the software package from which you
+* obtained this Software ("EULA").
+* If no EULA applies, Cypress hereby grants you a personal, non-exclusive,
+* non-transferable license to copy, modify, and compile the Software
+* source code solely for use in connection with Cypress's
+* integrated circuit products.  Any reproduction, modification, translation,
+* compilation, or representation of this Software except as specified
+* above is prohibited without the express written permission of Cypress.
+*
+* Disclaimer: THIS SOFTWARE IS PROVIDED AS-IS, WITH NO WARRANTY OF ANY KIND,
+* EXPRESS OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, NONINFRINGEMENT, IMPLIED
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE. Cypress
+* reserves the right to make changes to the Software without notice. Cypress
+* does not assume any liability arising out of the application or use of the
+* Software or any product or circuit described in the Software. Cypress does
+* not authorize its products for use in any products where a malfunction or
+* failure of the Cypress product may reasonably be expected to result in
+* significant property damage, injury or death ("High Risk Product"). By
+* including Cypress's product in a High Risk Product, the manufacturer
+* of such system or application assumes all risk of such use and in doing
+* so agrees to indemnify Cypress against all liability.
+*******************************************************************************/
+
+/*******************************************************************************
+*        Header Files
+*******************************************************************************/
+#include "cybsp.h"
+#include "cybsp_bt_config.h"
+#include "cyhal.h"
+#include "cyhal_gpio.h"
+#include "stdio.h"
+#include "cyabs_rtos.h"
+#include "cy_syspm.h"
+#include "cy_sysclk.h"
+#include <FreeRTOS.h>
+#include <task.h>
+#include <queue.h>
+#include <string.h>
+
+#include "app_bt_event_handler.h"
+#include "app_hw_handler.h"
+#include "app_hw_keyscan.h"
+#include "app_hw_serial_flash.h"
+#include "audio.h"
+#include "timers.h"
+#include "app_hw_batmon.h"
+#include "cybt_platform_hci.h"
+#include "cybt_platform_trace.h"
+#ifdef ENABLE_BT_SPY_LOG
+#include "cybt_debug_uart.h"
+#else
+#include "cy_retarget_io.h"
+#endif
+
+
+/*******************************************************************************
+*        Macro Definitions
+*******************************************************************************/
+#ifdef NO_LOGGING
+#define printf(fmt, ...)     (void)0
+#endif
+
+#ifdef ENABLE_BT_SPY_LOG
+#define printf               WICED_BT_TRACE
+#endif
+
+/* FreeRTOS Task Configurations of various  Bluetooth LE Voice Remote Tasks */
+
+/* Task names for  Bluetooth LE Voice Remote tasks */
+#define BLE_TASK_NAME                   "BLE Task"
+#define KEYSCAN_TASK_NAME               "Keyscan Task"
+
+
+/* Stack sizes for  Bluetooth LE Voice Remote tasks */
+#define BLE_TASK_STACK_SIZE                 (512u)
+#define KEYSCAN_TASK_STACK_SIZE             (512u)
+
+/* Task Priorities of  Bluetooth LE Voice Remote Tasks */
+#define BLE_TASK_PRIORITY                   (1)
+#define KEYSCAN_TASK_PRIORITY               (configMAX_PRIORITIES - 2)
+
+/* Sufficient Heap size for Bluetooth activities */
+#define BT_HEAP_SIZE                        (0x1000)
+
+/*******************************************************************************
+*                           Global Variables
+*******************************************************************************/
+/* Task and Queue Handles of  Bluetooth LE Voice Remote Application  */
+TaskHandle_t ble_task_h;
+
+extern TaskHandle_t keyscan_task_h;
+
+extern QueueHandle_t hid_rpt_q;
+
+/*Kvstore block device*/
+mtb_kvstore_bd_t                    block_device;
+
+const cybt_platform_config_t bt_platform_cfg_settings =
+{
+    .hci_config =
+    {
+        #if (defined (CYW20829A0LKML)) || (defined (CYW20829_PSVP)) || (defined (BLESS_PORTING_LAYER))
+        .hci_transport = CYBT_HCI_IPC,
+        #else
+        .hci_transport = CYBT_HCI_UART,
+        .hci =
+        {
+            .hci_uart =
+            {
+                .uart_tx_pin = CYBSP_BT_UART_TX,
+                .uart_rx_pin = CYBSP_BT_UART_RX,
+                .uart_rts_pin = CYBSP_BT_UART_RTS,
+                .uart_cts_pin = CYBSP_BT_UART_CTS,
+
+                .baud_rate_for_fw_download = 115200,
+                .baud_rate_for_feature     = 115200,
+
+                .data_bits = 8,
+                .stop_bits = 1,
+                .parity = CYHAL_UART_PARITY_NONE,
+                .flow_control = WICED_TRUE
+            }
+        }
+        #endif
+    },
+
+    .controller_config =
+        {
+            .bt_power_pin      = NC,
+            #if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
+                       ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
+                       (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
+            .sleep_mode = { .sleep_mode_enabled = 1 },
+            #else
+            .sleep_mode = { .sleep_mode_enabled = 0 },
+            #endif
+        },
+
+    .task_mem_pool_size    = 2048
+};
+
+/*******************************************************************************
+*        Function Prototypes
+*******************************************************************************/
+
+/* Function to initialize the various tasks for the Bluetooth LE Remote application */
+static void remote_tasks_init(void);
+
+/******************************************************************************
+ *                          Function Definitions
+ ******************************************************************************/
+
+/*
+ *  Entry point to the application. Set device configuration and start BT
+ *  stack initialization.  The actual application initialization will happen
+ *  when stack reports that BT device is ready.
+ */
+int main(void)
+ {
+
+    /* Initialise the BSP and Verify the BSP initialization */
+    CY_ASSERT(CY_RSLT_SUCCESS == cybsp_init());
+
+#ifndef PDM_MIC
+    Cy_GPIO_Pin_FastInit(GPIO_PRT0, 1U, 0x00U, 0x00U, HSIOM_SEL_GPIO);
+    Cy_GPIO_Pin_FastInit(GPIO_PRT0, 2U, 0x00U, 0x00U, HSIOM_SEL_GPIO);
+    Cy_SysClk_PeriPclkDisableDivider((en_clk_dst_t)PERI_0_GROUP_3_DIV_16_5_0_GRP_NUM, CY_SYSCLK_DIV_16_5_BIT, 0U);
+#endif
+
+    /* Enable global interrupts */
+    __enable_irq();
+
+    /* Initialize the tasks */
+    remote_tasks_init();
+
+    /* Start the FreeRTOS scheduler */
+    vTaskStartScheduler();
+
+    /* Should never get here */
+    printf("Scheduler exited unexpectedly\r\n");
+    CY_ASSERT(0);
+}
+
+
+/**
+ * @brief Initializes all the FreeRTOS tasks needed for the voice remote
+ * application.
+ *
+ */
+static void remote_tasks_init(void)
+{
+
+    // TODO Separate HAL/PDL and RTOS Task/Queue Initialisation
+
+#ifdef ENABLE_BT_SPY_LOG
+    cybt_debug_uart_config_t config = {
+        .uart_tx_pin    = CYBSP_DEBUG_UART_TX,
+        .uart_rx_pin    = CYBSP_DEBUG_UART_RX,
+        .uart_cts_pin   = CYBSP_DEBUG_UART_CTS,
+        .uart_rts_pin   = CYBSP_DEBUG_UART_RTS,
+        .baud_rate      = DEBUG_UART_BAUDRATE,
+        .flow_control   = TRUE };
+    cybt_debug_uart_init(&config, NULL);
+#else
+    /* Initialize retarget-io to use the debug UART port */
+    cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,\
+                        CY_RETARGET_IO_BAUDRATE);
+    Cy_GPIO_SetHSIOM(GPIO_PRT3, 2, HSIOM_SEL_GPIO);
+#endif
+    cybt_platform_set_trace_level(CYBT_TRACE_ID_STACK, CYBT_TRACE_ID_MAX);
+
+    /* Initialising the HCI UART for Host contol */
+    cybt_platform_config_init(&bt_platform_cfg_settings);
+
+    /* Debug logs on UART port */
+    printf("****** Bluetooth LE Voice Remote Application ******\r\n");
+
+#ifdef BSA_OPUS
+    printf("Bluetooth LE Voice Transport : BSA Opus\r\n");
+#endif
+#ifdef ATV_ADPCM
+    printf("Bluetooth LE Voice Transport : Google's Android TV\r\n");
+#endif
+
+    printf("GAP Peripheral preffered Connection Parameters\r\n");
+    app_print_byte_array(app_gap_peripheral_preferred_connection_parameters,
+                         app_gap_peripheral_preferred_connection_parameters_len);
+
+    printf("\r\nThis application implements HoGP and sends HID reports on "
+            "key press over BLE \r\n");
+
+    printf("\r\nDiscover this device with the name:%s\r\n", app_gap_device_name);
+
+    // TODO Initialize the serial flash for bonding
+    /* Initialize the block device used by kv-store for perfroming read/write
+     * operations to the flash
+     */
+    app_flash_bd_init(&block_device);
+
+    /* Configure Bluetooth LE configuration & registers Bluetooth LE event callback function
+     * with the BT stack
+     */
+    if( WICED_BT_SUCCESS != wiced_bt_stack_init(app_bt_management_callback,   \
+                                                &wiced_bt_cfg_settings))
+    {
+        /* Check if stack initialization was successful */
+        printf("Bluetooth Stack Initialization failed!!\r\n");
+    }
+
+    /* Create a buffer heap, make it the default heap.  */
+    if( NULL == wiced_bt_create_heap("app", NULL, BT_HEAP_SIZE, NULL, WICED_TRUE))
+    {
+        printf("Heap create Failed");
+    }
+
+    /* Initialize the status LED for connection and advertisement */
+    /* The status LED toggles for every non-audio notifications */
+    /* Initialize the User LED */
+    //app_status_led_init();
+
+    /* Initialize Bluetooth LE task or Stack */
+    if( pdPASS != xTaskCreate(app_ble_task,
+                              BLE_TASK_NAME,
+                              BLE_TASK_STACK_SIZE,
+                              NULL,
+                              BLE_TASK_PRIORITY,
+                              &ble_task_h))
+    {
+        /* Task is not created due to insufficient Heap memory.
+         * Use vApplicationMallocFailedHook() callback to trap.
+         * And xPortGetFreeHeapSize() to query unallocated heap memory
+         */
+        printf("Bluetooth LE Task creation failed");
+    }
+
+    /* Creates Task and Queue for Encoder */
+    audio_task_init();
+
+    xmit_task_init();
+
+    batmon_task_init();
+
+    // Keyscan Queue to send msgs to Bluetooth LE Task
+    hid_rpt_q =  xQueueCreate(HID_MSG_Q_SZ, HID_MSG_Q_ITEM_SZ);
+    if(NULL == hid_rpt_q)
+    {
+        printf("HID Report Queue creation failed! \r\n");
+        CY_ASSERT(0);
+    };
+
+    // Workaround for device configurator bug on Keyscan. - Now fixed.
+    // init_ks_gpio_pins();
+
+    /* Initialize the Keyscan task */
+    if( pdPASS != xTaskCreate(keyscan_task,
+                              KEYSCAN_TASK_NAME,
+                              KEYSCAN_TASK_STACK_SIZE,
+                              NULL,                     /* (void*) &xBatmonTaskParam */
+                              KEYSCAN_TASK_PRIORITY,
+                              &keyscan_task_h))
+    {
+        /* Task is not created due to insufficient Heap memory.
+         * Use vApplicationMallocFailedHook() callback to trap.
+         * And xPortGetFreeHeapSize() to query unallocated heap memory
+         */
+        printf("Keyscan Task creation failed");
+    }
+
+    /* Initialize the IR task */
+
+
+}
+
+
+
+
+/* [] END OF FILE */
