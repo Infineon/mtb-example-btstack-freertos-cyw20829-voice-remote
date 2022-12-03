@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -137,9 +137,6 @@ typedef struct
 /*******************************************************************************
  * Global variable
  ******************************************************************************/
-extern QueueHandle_t audio_q;
-extern TaskHandle_t audio_task_h;
-extern audio_state_t audio_cap_state;
 
 extern int16_t pcm_buff[NO_AUDIO_DMA_BUF][AUDIO_FRAME_SIZE];
 extern uint8_t enc_buff_pool[NO_OF_ENC_BUFF][ENC_PKT_SIZE];

@@ -6,7 +6,7 @@
 *              Server callbacks.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,14 +46,21 @@
 #include "app_bt_utils.h"
 #include "app_bt_advert.h"
 #include "app_hw_handler.h"
-
-#include "GeneratedSource/cycfg_gatt_db.h"
+#include "app_bt_bonding.h"
+#ifdef ATV_ADPCM
+#include "app_bt_hid_atv.h"
+#endif
+#ifdef BSA_OPUS
+#include "app_bt_hid_bsa.h"
+#endif
+#include "cycfg_gatt_db.h"
 #include "cybt_platform_trace.h"
 #include "wiced_bt_ble.h"
-
+#include "wiced_bt_l2c.h"
+#include "wiced_memory.h"
 
 /*******************************************************************************
- *                      MACROS / VARIABLE DEFINITIONS
+ *                      VARIABLE DEFINITIONS
  ******************************************************************************/
 /* This variable tracks the number of congestion events during audio transfer */
 uint16_t num_of_congestions = 0;
@@ -71,6 +78,7 @@ uint16_t preferred_mtu_size = CY_BT_MTU_SIZE;
 extern TaskHandle_t xmit_task_h;
 
 wiced_bt_device_address_t peer_bd_addr = {0};
+
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
  ******************************************************************************/
@@ -84,32 +92,34 @@ extern wiced_result_t BTM_SetDataChannelPDULength(wiced_bt_device_address_t bd_a
 /*******************************************************************************
  *                              FUNCTION DEFINITIONS
  ******************************************************************************/
-/*******************************************************************************
- * Function Name: app_free_buffer
- *******************************************************************************
- * Summary:
- *  This function frees up the buffer memory.
+
+/**
+ * Function Name:
+ * app_free_buffer
  *
+ *  Function Description:
+ * @brief    This function frees up the buffer memory.
  *
- * Parameters:
- *  uint8_t *p_data: Pointer to the buffer to be free
+ * @param    uint8_t *p_data: Pointer to the buffer to be free
  *
- *******************************************************************************/
+ * @return void
+ */
 static void app_free_buffer(uint8_t *p_event_data)
 {
     wiced_bt_free_buffer(p_event_data);
 }
 
-/*******************************************************************************
- * Function Name: app_free_buffer
- *******************************************************************************
- * Summary:
- *  This function allocates the memory from BT buffer pool.
+/**
+ * Function Name:
+ * app_free_buffer
  *
- * Parameters:
- *  uint8_t len : Length to be allocated
+ *  Function Description:
+ * @brief    This function allocates the memory from BT buffer pool.
  *
- *******************************************************************************/
+ * @param    uint8_t len : Length to be allocated
+ *
+ * @return uint8_t * : Pointer to the start address of allocated memory
+ */
 static uint8_t *app_alloc_buffer(uint16_t len)
 {
     uint8_t *p_mem = (uint8_t *)wiced_bt_get_buffer(len);
@@ -122,17 +132,17 @@ static uint8_t *app_alloc_buffer(uint16_t len)
     return p_mem;
 }
 
-/*
- Function Name:
- app_bt_gatt_event_handler
-
- Function Description:
- @brief  This Function handles the all the GATT events - GATT Event Handler
-
- @param event            Bluetooth LE GATT event type
- @param p_event_data     Pointer to Bluetooth LE GATT event data
-
- @return wiced_bt_gatt_status_t  Bluetooth LE GATT status
+/**
+ * Function Name:
+ * app_bt_gatt_event_handler
+ *
+ * Function Description:
+ * @brief  This Function handles the all the GATT events - GATT Event Handler
+ *
+ * @param event            Bluetooth LE GATT event type
+ * @param p_event_data     Pointer to Bluetooth LE GATT event data
+ *
+ * @return wiced_bt_gatt_status_t  Bluetooth LE GATT status
  */
 wiced_bt_gatt_status_t
 app_bt_gatt_event_handler(wiced_bt_gatt_evt_t event,
@@ -211,17 +221,17 @@ app_bt_gatt_event_handler(wiced_bt_gatt_evt_t event,
 }
 
 
-/*
- Function Name:
- app_gatt_connection_status_change_cb
-
- Function Description:
- @brief  The callback function is invoked when GATT_CONNECTION_STATUS_EVT occurs
-         in GATT Event handler function
-
- @param p_conn_status     Pointer to Bluetooth LE GATT connection status
-
- @return wiced_bt_gatt_status_t  Bluetooth LE GATT status
+/**
+ * Function Name:
+ * app_gatt_connection_status_change_cb
+ *
+ * Function Description:
+ * @brief  The callback function is invoked when GATT_CONNECTION_STATUS_EVT occurs
+ *         in GATT Event handler function
+ *
+ * @param p_conn_status     Pointer to Bluetooth LE GATT connection status
+ *
+ * @return wiced_bt_gatt_status_t  Bluetooth LE GATT status
  */
 wiced_bt_gatt_status_t
 app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_status)
@@ -238,8 +248,6 @@ app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_s
         app_print_bd_address(p_conn_status->bd_addr);
         printf("Connection ID: '%d'\r\n", p_conn_status->conn_id);
         printf("Peer device addr type : %d\r\n", p_conn_status->addr_type );
-
-        app_status_led_off();
 
         app_bt_conn_id  = p_conn_status->conn_id;
         // Stop Advertisement as new device is connected
@@ -262,6 +270,8 @@ app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_s
         {
             printf("connection param disabled\r\n");
         }
+
+
     }
     else
     {
@@ -272,8 +282,6 @@ app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_s
         printf("\nReason for disconnection: %d \t", p_conn_status->reason);
         printf(app_get_gatt_disconn_reason_name(p_conn_status->reason));
         printf("\r\n");
-
-        app_status_led_on();
 
         /* Handle the disconnection */
         app_bt_conn_id  = 0;
@@ -295,17 +303,17 @@ app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_s
     return gatt_status;
 }
 
-/*
- Function Name:
- app_gatt_attr_request_cb
-
- Function Description:
- @brief  The callback function is invoked when GATT_ATTRIBUTE_REQUEST_EVT occurs
-         in GATT Event handler function. GATT Server Event Callback function.
-
- @param GATT Request attribute  Pointer to GATT attribute Request structure
-
- @return wiced_bt_gatt_status_t  BLE GATT status
+/**
+ * Function Name:
+ * app_gatt_attr_request_cb
+ *
+ * Function Description:
+ * @brief  The callback function is invoked when GATT_ATTRIBUTE_REQUEST_EVT occurs
+ *         in GATT Event handler function. GATT Server Event Callback function.
+ *
+ * @param GATT Request attribute  Pointer to GATT attribute Request structure
+ *
+ * @return wiced_bt_gatt_status_t  BLE GATT status
  */
 wiced_bt_gatt_status_t
 app_gatt_attr_request_cb( wiced_bt_gatt_attribute_request_t *p_attr_req)
@@ -372,18 +380,18 @@ app_gatt_attr_request_cb( wiced_bt_gatt_attribute_request_t *p_attr_req)
     return gatt_status;
 }
 
-/*
- Function Name:
- app_gatt_attr_write_handler
-
- Function Description:
- @brief  The function is invoked when GATTS_REQ_TYPE_WRITE is received from the
-         client device and is invoked GATT Server Event Callback function. This
-         handles "Write Requests" received from Client device.
-
- @param p_write_req   Pointer to BLE GATT write request
-
- @return wiced_bt_gatt_status_t  BLE GATT status
+/**
+ * Function Name:
+ * app_gatt_attr_write_handler
+ *
+ * Function Description:
+ * @brief  The function is invoked when GATTS_REQ_TYPE_WRITE is received from the
+ *         client device and is invoked GATT Server Event Callback function. This
+ *         handles "Write Requests" received from Client device.
+ *
+ * @param p_write_req   Pointer to BLE GATT write request
+ *
+ * @return wiced_bt_gatt_status_t  BLE GATT status
  */
 wiced_bt_gatt_status_t
 app_gatt_attr_write_handler(uint16_t conn_id,
@@ -419,19 +427,19 @@ app_gatt_attr_write_handler(uint16_t conn_id,
 
 }
 
-/*
- Function Name:
- app_gatt_attr_read_handler
-
- Function Description:
- @brief  The function is invoked when GATTS_REQ_TYPE_READ is received from the
-         client device and is invoked by GATT Server Event Callback function.
-         This handles "Read Requests" received from Client device
-
- @param p_read_req   Pointer to BLE GATT read request
- @param len_req Length of the attribute requested by the Peer device
-
- @return wiced_bt_gatt_status_t  BLE GATT status
+/**
+ * Function Name:
+ * app_gatt_attr_read_handler
+ *
+ * Function Description:
+ * @brief  The function is invoked when GATTS_REQ_TYPE_READ is received from the
+ *         client device and is invoked by GATT Server Event Callback function.
+ *         This handles "Read Requests" received from Client device
+ *
+ * @param p_read_req   Pointer to BLE GATT read request
+ * @param len_req Length of the attribute requested by the Peer device
+ *
+ * @return wiced_bt_gatt_status_t  BLE GATT status
  */
 wiced_bt_gatt_status_t
 app_gatt_attr_read_handler( uint16_t conn_id,
@@ -481,22 +489,21 @@ app_gatt_attr_read_handler( uint16_t conn_id,
 
 }
 
-/*******************************************************************************
-* Function Name: app_gatt_read_by_type_handler
-********************************************************************************
-* Summary:
-* This function handles the GATT read by type request events from the stack
-*
-* Parameters:
-*  uint16_t conn_id: Connection ID
-*  wiced_bt_gatt_opcode_t opcode: GATT opcode
-*  wiced_bt_gatt_read_t * p_read_data: Read data structure
-*  uint16_t len_requested: Length requested
-*
-* Return:
-*  wiced_bt_gatt_status_t: GATT result
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * app_gatt_read_by_type_handler
+ *
+ *  Function Description:
+ * @brief This function handles the GATT read by type request events from the stack
+ *
+ * @param uint16_t conn_id: Connection ID
+ * @param wiced_bt_gatt_opcode_t opcode: GATT opcode
+ * @param wiced_bt_gatt_read_t * p_read_data: Read data structure
+ * @param uint16_t len_requested: Length requested
+ *
+ * @return wiced_bt_gatt_status_t: GATT result
+ *
+ */
 wiced_bt_gatt_status_t
 app_gatt_read_by_type_handler(  uint16_t conn_id,
                                 wiced_bt_gatt_opcode_t opcode,
@@ -582,20 +589,20 @@ app_gatt_read_by_type_handler(  uint16_t conn_id,
 
 }
 
-/*
- Function Name:
- app_get_gatt_attr_value
-
- Function Description:
- @brief  The function is invoked by app_gatt_attr_read_handler to get a Value from
-         GATT DB.
-
- @param attr_handle_index  Attribute handle's index in Attribute table.
- @param p_val        Pointer to BLE GATT read request value
- @param len          Maximum length of GATT read request
- @param p_len        Pointer to BLE GATT read request length
-
- @return wiced_bt_gatt_status_t  BLE GATT status
+/**
+ * Function Name:
+ * app_get_gatt_attr_value
+ *
+ * Function Description:
+ * @brief  The function is invoked by app_gatt_attr_read_handler to get a Value from
+ *         GATT DB.
+ *
+ * @param attr_handle_index  Attribute handle's index in Attribute table.
+ * @param p_val        Pointer to BLE GATT read request value
+ * @param len          Maximum length of GATT read request
+ * @param p_len        Pointer to BLE GATT read request length
+ *
+ * @return wiced_bt_gatt_status_t  BLE GATT status
  */
 wiced_bt_gatt_status_t
 app_get_gatt_attr_value(uint8_t attr_handle_index,
@@ -640,20 +647,20 @@ app_get_gatt_attr_value(uint8_t attr_handle_index,
     return (gatt_status);
 }
 
-/*
- Function Name:
- app_set_gatt_attr_value
-
- Function Description:
- @brief  The function is invoked by app_gatt_attr_write_handler to set a value
-         to GATT DB.
-
- @param attr_handle_index  Attribute handle's index in Attribute table.
- @param p_val Pointer to BLE GATT write request value
- @param len   length of GATT write request
- @param opcode Opcode from the peer device
-
- @return wiced_bt_gatt_status_t  BLE GATT status
+/**
+ * Function Name:
+ * app_set_gatt_attr_value
+ *
+ * Function Description:
+ * @brief  The function is invoked by app_gatt_attr_write_handler to set a value
+ *         to GATT DB.
+ *
+ * @param attr_handle_index  Attribute handle's index in Attribute table.
+ * @param p_val Pointer to BLE GATT write request value
+ * @param len   length of GATT write request
+ * @param opcode Opcode from the peer device
+ *
+ * @return wiced_bt_gatt_status_t  BLE GATT status
  */
 wiced_bt_gatt_status_t app_set_gatt_attr_value(uint8_t attr_handle_index,
                                         uint8_t *p_val,
@@ -782,6 +789,10 @@ wiced_bt_gatt_status_t app_set_gatt_attr_value(uint8_t attr_handle_index,
 
 
 /**
+ * Function Name:
+ * app_get_attr_index_by_handle
+ *
+ * Function Description:
  * @brief This function returns the corresponding index for the respective
  * attribute handle from the attribute table.
  *
@@ -819,9 +830,17 @@ uint8_t app_get_attr_index_by_handle(uint16_t attr_handle)
 }
 
 /**
+ * Function Name:
+ * app_enable_all_cccds
+ *
+ * Function Description:
  * @brief This is a temporary function for testing purposes to validate CCCD
  * enablement if the Host is not trying to write to CCCDs. Will be removed once
  * the application is stable.
+ *
+ * @param void
+ *
+ * @return void
  */
 void app_enable_all_cccds(void)
 {
@@ -841,9 +860,17 @@ void app_enable_all_cccds(void)
 }
 
 /**
+ * Function Name:
+ * app_disable_all_cccds
+ *
+ * Function Description:
  * @brief This is a temporary function for testing purposes to validate CCCD
  * disablement if the Host is not trying to write to CCCDs. Will be removed once
  * the application is stable.
+ *
+ * @param void
+ *
+ * @return void
  */
 void app_disable_all_cccds(void)
 {

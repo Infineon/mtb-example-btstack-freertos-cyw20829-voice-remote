@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,18 +46,11 @@
  ******************************************************************************/
 #ifndef __APP_BT_HID_H__
 #define __APP_BT_HID_H__
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include "audio.h"
-#include "timers.h"
-#include "cy_utils.h"
-#ifdef ATV_ADPCM
-#include "app_bt_hid_atv.h"
-#endif
-#ifdef BSA_OPUS
-#include "app_bt_hid_bsa.h"
-#endif
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "queue.h"
+
 
 /*******************************************************************************
  *                                Constants
@@ -119,35 +112,6 @@
 
 #endif // APP_SPECIFIC_HID
 
-#ifdef GENERIC_HID_SPEC
-
-/* Report Type */
-#define INPUT_REPORT                            (0x01u)
-#define OUTPUT_REPORT                           (0x02u)
-#define FEATURE_REPORT                          (0x03u)
-
-/* Client Characteristic Configuration Descriptor Size */
-#define CCCD_SIZE                                (2u)   /* In Bytes (16bit) */
-
-/* Recommended ADV Duration and Interval from HoGP */
-#define HIGH_DUTY_ADV_DURATION_IN_SEC            (180u)
-#define MIN_HIGH_DUTY_ADV_INTERVAL_IN_MS          (30u)
-#define MAX_HIGH_DUTY_ADV_INTERVAL_IN_MS          (50u)
-
-/* Device Initiated Connection Procedure for Bonded Devices from HoGP */
-/* Start with low duty and then move to high duty as per HoGP */
-#define PAIRED_LOW_DUTY_ADV_DURATION_IN_MS        (128u)   /* Directed */
-#define PAIRED_HIGH_DUTY_ADV_DURATION_IN_SEC       (30u)   /* Undirected */
-#define PAIRED_MIN_HIGH_DUTY_ADV_INTERVAL_IN_MS    (20u)
-#define PAIRED_MAX_HIGH_DUTY_ADV_INTERVAL_IN_MS    (30u)
-
-/* Host Initiated Connection Procedure for Bonded Devices from HoGP */
-#define PAIRED_ADV_DURATION                         (0u)   /* Continuous non-stop undirected low duty */
-#define PAIRED_MIN_ADV_INTERVAL_IN_MS             (100u)
-#define PAIRED_MAX_ADV_INTERVAL_IN_MS             (250u)
-
-#endif // GENERIC_HID_SPEC
-
 /*******************************************************************************
  *                          Variable Declarations
  ******************************************************************************/
@@ -187,5 +151,6 @@ extern QueueHandle_t hid_rpt_q;
 void app_ble_task(void* pvParameters);
 void app_send_audio_data(uint8_t *enc_buffer);
 void app_send_batt_report(uint8_t battery_percentage);
+void ble_task_init(void);
 
 #endif // __APP_BT_HID_H__

@@ -1,13 +1,13 @@
 /*******************************************************************************
 * File Name: app_bt_advert.c
 *
-* Description: This File provides the implementations necessary for Bluetooth
-* Advertisements.
+* Description: This File provides the implementations necessary for
+* Bluetooth Advertisements.
 *
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,7 +46,7 @@
 #include "app_bt_advert.h"
 #include "app_hw_handler.h"
 #include "app_bt_gatt_handler.h"
-
+#include "app_bt_bonding.h"
 #include "wiced_bt_gatt.h"
 #include "wiced_bt_ble.h"
 
@@ -110,16 +110,16 @@ void app_bt_adv_start(void)
 
 }
 
-/*
- Function Name:
- app_bt_set_advertisement_data
-
- Function Description:
- @brief  Set Advertisement Data
-
- @param void
-
- @return wiced_result_t WICED_SUCCESS or WICED_failure
+/**
+ * Function Name:
+ * app_bt_set_advertisement_data
+ *
+ * Function Description:
+ * @brief  Set Advertisement Data
+ *
+ * @param void
+ *
+ * @return wiced_result_t WICED_SUCCESS or WICED_failure
  */
 static void app_bt_set_advertisement_data(void)
 {
@@ -176,9 +176,15 @@ static void app_bt_set_advertisement_data(void)
 }
 
 /**
+ *  Function Name:
+ *  app_bt_set_advertisement_data
+ *
+ * Function Description:
  * @brief Do directed advertising for the devices in the whitelist
  *
  * @param bdaddr BD Address to be added to the whitelist
+ *
+ * @return void
  */
 void app_bt_set_adv_filter(wiced_bt_device_address_t bdaddr)
 {
@@ -207,7 +213,7 @@ void app_bt_set_adv_filter(wiced_bt_device_address_t bdaddr)
  *  app_bt_advert_state_handler
  *
  *  Function Description:
- *  @brief
+ *  @brief Remote State change handler based on advertisement state.
  *
  *  @param    current_adv_mode
  *
@@ -230,7 +236,7 @@ void app_bt_advert_state_handler(wiced_bt_ble_advert_mode_t current_adv_mode)
                 }
                 else if (current_remote_state == UNPAIRED_ADVERTISING)
                 {
-                current_remote_state = UNPAIRED_IDLE;
+                    current_remote_state = UNPAIRED_IDLE;
                 }
             }
             else
@@ -247,16 +253,13 @@ void app_bt_advert_state_handler(wiced_bt_ble_advert_mode_t current_adv_mode)
         case BTM_BLE_ADVERT_UNDIRECTED_LOW:
             break;
         case BTM_BLE_ADVERT_NONCONN_HIGH:
-            // TODO
             break;
         case BTM_BLE_ADVERT_NONCONN_LOW:
-            // TODO
             break;
         case BTM_BLE_ADVERT_DISCOVERABLE_HIGH:
-            // TODO
             break;
         default:
-            printf("ERROR: Unknown state");
+            printf("ERROR: Unknown advertisement state\r\n");
             break;
     }
 

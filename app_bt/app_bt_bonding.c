@@ -1,5 +1,5 @@
 /******************************************************************************
-* File Name:   app_bt_bonding.c
+* File Name: app_bt_bonding.c
 *
 * Description: This is the source code for Bluetooth bonding implementation using
 *              kv-store library.
@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,12 +45,8 @@
 #include "wiced_bt_stack.h"
 #include "cybsp.h"
 #include "cyhal.h"
-#include "cy_retarget_io.h"
-#include <FreeRTOS.h>
-#include <task.h>
 #include "cycfg_bt_settings.h"
 #include "cycfg_gatt_db.h"
-#include <queue.h>
 #include "app_bt_bonding.h"
 #include "mtb_kvstore.h"
 #include "app_bt_utils.h"
@@ -58,6 +54,8 @@
 #include "cy_pdl.h"
 #include "cycfg.h"
 #include "cycfg_qspi_memslot.h"
+#include "app_hw_handler.h"
+#include "cybsp_smif_init.h"
 
 /*******************************************************************************
  *                              Macro Definitions
@@ -89,7 +87,7 @@ wiced_bt_local_identity_keys_t  identity_keys;                  /* Local Indenti
  * of the host we are currently bonded to */
 uint8_t         bondindex = 0;
 
-mtb_kvstore_t   kvstore_obj;
+static mtb_kvstore_t   kvstore_obj;
 
 cy_stc_smif_context_t SMIFContext;
 
@@ -98,9 +96,6 @@ extern uint16_t app_bt_conn_id;
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
  ******************************************************************************/
-static cy_en_smif_status_t IsQuadEnabled(cy_stc_smif_mem_config_t const *memConfig, bool *isQuadEnabled);
-static cy_en_smif_status_t IsMemoryReady(cy_stc_smif_mem_config_t const *memConfig);
-static cy_en_smif_status_t EnableQuadMode(cy_stc_smif_mem_config_t const *memConfig);
 static uint8_t app_bt_find_cccd_bit(uint16_t attr_handle);
 
 /*******************************************************************************
@@ -110,217 +105,58 @@ static uint8_t app_bt_find_cccd_bit(uint16_t attr_handle);
 /*******************************************************************************
  *              QSPI, SMIF and KVstor Init API for Non-Voltaile Storage
  ******************************************************************************/
-/*******************************************************************************
-* Function Name: IsQuadEnabled
-****************************************************************************//**
-*
-* Checks whether QE (Quad Enable) bit is set or not in the configuration
-* register of the memory.
-*
-* \param memConfig
-* Memory device configuration
-*
-* \param isQuadEnabled
-* This parameter is updated to indicate whether Quad mode is enabled (true) or
-* not (false). The value is valid only when the function returns
-* CY_SMIF_SUCCESS.
-*
-* \return Status of the operation. See cy_en_smif_status_t.
-*
-*******************************************************************************/
-static cy_en_smif_status_t
-IsQuadEnabled(cy_stc_smif_mem_config_t const *memConfig, bool *isQuadEnabled)
-{
-    cy_en_smif_status_t status;
-    uint8_t readStatus = 0;
-    uint32_t statusCmd = memConfig->deviceCfg->readStsRegQeCmd->command;
-    uint8_t maskQE = (uint8_t) memConfig->deviceCfg->stsRegQuadEnableMask;
-
-    status = Cy_SMIF_Memslot_CmdReadSts(SMIF0,
-                                        memConfig,
-                                        &readStatus,
-                                        statusCmd,
-                                        &SMIFContext);
-
-    *isQuadEnabled = false;
-    if(CY_SMIF_SUCCESS == status)
-    {
-        /* Check whether Quad mode is already enabled or not */
-        *isQuadEnabled = (maskQE == (readStatus & maskQE));
-    }
-
-    return status;
-}
-
-/*******************************************************************************
-* Function Name: IsMemoryReady
-****************************************************************************//**
-*
-* Polls the memory device to check whether it is ready to accept new commands or
-* not until either it is ready or the retries have exceeded the limit.
-*
-* \param memConfig
-* memory device configuration
-*
-* \return Status of the operation.
-* CY_SMIF_SUCCESS          - Memory is ready to accept new commands.
-* CY_SMIF_EXCEED_TIMEOUT - Memory is busy.
-*
-*******************************************************************************/
-static cy_en_smif_status_t
-IsMemoryReady(cy_stc_smif_mem_config_t const *memConfig)
-{
-    uint32_t retries = 0;
-    bool isBusy;
-
-    do
-    {
-        isBusy = Cy_SMIF_Memslot_IsBusy(SMIF0,
-                                        (cy_stc_smif_mem_config_t* )memConfig,
-                                        &SMIFContext);
-        Cy_SysLib_Delay(5);
-        retries++;
-    }while(isBusy && (retries < MEMORY_BUSY_CHECK_RETRIES));
-
-    return (isBusy ? CY_SMIF_EXCEED_TIMEOUT : CY_SMIF_SUCCESS);
-}
-
-/*******************************************************************************
-* Function Name: EnableQuadMode
-****************************************************************************//**
-*
-* This function sets the QE (QUAD Enable) bit in the external memory
-* configuration register to enable Quad SPI mode.
-*
-* \param memConfig
-* Memory device configuration
-*
-* \return Status of the operation. See cy_en_smif_status_t.
-*
-*******************************************************************************/
-static cy_en_smif_status_t EnableQuadMode(cy_stc_smif_mem_config_t const *memConfig)
-{
-    cy_en_smif_status_t status;
-
-    /* Send Write Enable to external memory */
-    status = Cy_SMIF_Memslot_CmdWriteEnable(SMIF0, smifMemConfigs[0], &SMIFContext);
-
-    if(CY_SMIF_SUCCESS == status)
-    {
-        status = Cy_SMIF_Memslot_QuadEnable(SMIF0,
-                                            (cy_stc_smif_mem_config_t* )memConfig,
-                                            &SMIFContext);
-
-        if(CY_SMIF_SUCCESS == status)
-        {
-            /* Poll memory for the completion of operation */
-            status = IsMemoryReady(memConfig);
-        }
-    }
-
-    return status;
-}
 
 /**
-* Function Name:
-* app_kv_store_init
-*
-* Function Description:
-* @brief   This function initializes the SMIF and kv-store library
-*
-* @param   None
-*
-* @return  None
-*/
-void app_kv_store_init(void)
+ * Function Name:
+ * app_kv_store_init
+ *
+ * Function Description:
+ * @brief This function initializes the kv store used for write the bond data
+ *        in Non-Volatile Storage.
+ *
+ * @param void
+ *
+ * @return void
+ *
+ */
+void  app_kv_store_init(void)
 {
-    cy_rslt_t rslt;
-    uint32_t start_addr = 0;
-    bool QE_status = false;
-    /* Define the space to be used for Bond Data Storage */
     uint32_t sector_size = (size_t)smifBlockConfig.memConfig[0]->deviceCfg->eraseSize;
-    uint32_t length = sector_size * 2;
+    uint32_t length =  sector_size * 2;
+    uint32_t start_addr = 0;
+    cy_rslt_t rslt;
 
-    /* Initialize the QSPI */
-    cy_en_smif_status_t SMIF_Status = CY_SMIF_BAD_PARAM;
-    SMIF_Status = Cy_SMIF_Init( SMIF0,
-                                &smif_0_config,
-                                TIMEOUT_1_MS,
-                                &SMIFContext);
-    if(SMIF_Status == CY_SMIF_SUCCESS)
-    {
-        Cy_SMIF_SetDataSelect(  SMIF0,
-                                smifMemConfigs[0]->slaveSelect,
-                                smifMemConfigs[0]->dataSelect);
-        Cy_SMIF_Enable(SMIF0, &SMIFContext);
-        printf("SMIF Block Enabled\n\r");
-    }
-
-    SMIF_Status = Cy_SMIF_Memslot_Init(SMIF0,
-                                       (cy_stc_smif_block_config_t *)&smifBlockConfig,
-                                       &SMIFContext);
-    if(SMIF_Status != CY_SMIF_SUCCESS)
-    {
-        printf("SMIF memory slot initialization failed \n\r");
-    }
-
-    /* Even after SFDP enumeration QE command is not initialized */
-    /* So, it should be 1.0 device */
-    if (smifMemConfigs[0]->deviceCfg->readStsRegQeCmd->command == 0)
-    {
-        SMIF_Status = Cy_SMIF_MemInitSfdpMode(SMIF0,
-                                              smifMemConfigs[0],
-                                              CY_SMIF_WIDTH_QUAD,
-                                              CY_SMIF_SFDP_QER_1,
-                                              &SMIFContext);
-    }
-
-    /* Check if Quad mode is already enabled */
-    IsQuadEnabled(smifMemConfigs[0], &QE_status);
-
-    /* If not enabled, enable quad mode */
-    if(!QE_status)
-    {
-        /* Enable Quad mode */
-        SMIF_Status = EnableQuadMode(smifMemConfigs[0]);
-        printf("\n\rQuad mode is enabled.\n\r");
-    }
-
-    /* If the device is not a hybrid memory, use last sector to erase since first sector has some configuration data used
-     * during boot from flash operation.
-     */
-    if (smifMemConfigs[0]->deviceCfg->hybridRegionCount == 0U)
-    {
-        start_addr = smifMemConfigs[0]->deviceCfg->memSize/2 - smifMemConfigs[0]->deviceCfg->eraseSize *2;
-    }
+    cybsp_smif_init();
+    start_addr = smifMemConfigs[0]->deviceCfg->memSize - sector_size * 2;
 
     /*Initialize kv-store library*/
     rslt = mtb_kvstore_init(&kvstore_obj, start_addr, length, &block_device);
-    /*Check if the kv-store initialization was successfull*/
-    if (CY_RSLT_SUCCESS !=  rslt)
+    /*Check if the kv-store initialization was successful*/
+    if (CY_RSLT_SUCCESS != rslt)
     {
         printf("failed to initialize kv-store \r\n");
         CY_ASSERT(0);
     }
 }
 
+
 /*******************************************************************************
  *              Peer Device and Bond Info Management APIs
  ******************************************************************************/
 
 /**
-* Function Name:
-* app_bt_restore_bond_data
-*
-* Function Description:
-* @brief  This function restores the bond information from the Flash
-*
-* @param   None
-*
-* @return  cy_rslt_t: CY_RSLT_SUCCESS if the restoration was successful,
-*                         an error code otherwise.
-*
-*/
+ * Function Name:
+ * app_bt_restore_bond_data
+ *
+ * Function Description:
+ * @brief  This function restores the bond information from the Flash
+ *
+ * @param   void
+ *
+ * @return  cy_rslt_t: CY_RSLT_SUCCESS if the restoration was successful,
+ * an error code otherwise.
+ *
+ */
 cy_rslt_t app_bt_restore_bond_data(void)
 {
     /* Read and restore contents of Serial flash */
@@ -334,6 +170,8 @@ cy_rslt_t app_bt_restore_bond_data(void)
         printf("Bond data not present in the flash!\r\n");
         return rslt;
     }
+
+    // TODO Is it required?
     app_bt_add_devices_to_address_resolution_db();
     return rslt;
 }
@@ -345,10 +183,10 @@ cy_rslt_t app_bt_restore_bond_data(void)
 * Function Description:
 * @brief  This function updates the slot data in the Flash
 *
-* @param  None
+* @param  void
 *
 * @return cy_rslt_t: CY_RSLT_SUCCESS if the update was successful,
-*              an error code otherwise.
+* an error code otherwise.
 */
 cy_rslt_t app_bt_update_slot_data(void)
 {
@@ -372,7 +210,7 @@ cy_rslt_t app_bt_update_slot_data(void)
 * Function Description:
 * @brief This function updates the bond information in the Flash
 *
-* @param   None
+* @param   void
 *
 * @return  cy_rslt_t: CY_RSLT_SUCCESS if the update was successful,
 *              an error code otherwise.
@@ -397,7 +235,7 @@ cy_rslt_t app_bt_update_bond_data(void)
 * Function Description:
 * @brief  This deletes the bond information from the Flash
 *
-* @param  None
+* @param  void
 *
 * @return  cy_rslt_t: CY_RSLT_SUCCESS if the deletion was successful,
 *              an error code otherwise.
@@ -506,9 +344,9 @@ uint8_t app_bt_find_device_in_flash(uint8_t *bd_addr)
 * Function Description:
 * @brief This function adds the bonded devices to address resolution database
 *
-* @param  None
+* @param void
 *
-* @return None
+* @return void
 *
 */
 void app_bt_add_devices_to_address_resolution_db(void)
@@ -518,6 +356,11 @@ void app_bt_add_devices_to_address_resolution_db(void)
     {
         /* Add device to address resolution database */
         wiced_result_t result = wiced_bt_dev_add_device_to_address_resolution_db(&bondinfo.link_keys[i]);
+
+        // TODO This may cause issue in re-pairing when bondinfo is already present.
+        // result = wiced_bt_ble_set_privacy_mode(bondinfo.link_keys[i].bd_addr,
+        //                                        bondinfo.link_keys[i].key_data.ble_addr_type,
+        //                                        BTM_BLE_PRIVACY_MODE_DEVICE);
         if (WICED_BT_SUCCESS == result)
         {
             printf("Device added to address resolution database: ");
@@ -570,7 +413,7 @@ cy_rslt_t app_bt_save_device_link_keys(wiced_bt_device_link_keys_t *link_key)
 * app_bt_save_local_identity_key
 *
 * Function Description:
-* @briefThis function saves local device identity keys to the Flash
+* @brief This function saves local device identity keys to the Flash
 *
 * @param id_key: Local identity keys to store in the flash.
 *
@@ -606,7 +449,7 @@ cy_rslt_t app_bt_save_local_identity_key(wiced_bt_local_identity_keys_t id_key)
 * Function Description:
 * @brief This function reads local device identity keys from the Flash
 *
-* @param None
+* @param void
 *
 * @return cy_rslt_t: CY_RSLT_SUCCESS if the read was successful,
 *              an error code otherwise.
@@ -614,24 +457,22 @@ cy_rslt_t app_bt_save_local_identity_key(wiced_bt_local_identity_keys_t id_key)
 */
 cy_rslt_t app_bt_read_local_identity_keys(void)
 {
+
     uint32_t data_size = sizeof(identity_keys);
-    cy_rslt_t rslt = mtb_kvstore_read(  &kvstore_obj,
-                                        "local_irk",
-                                        NULL,
-                                        NULL);
-    if (rslt != CY_RSLT_SUCCESS)
-    {
-        printf("New Keys need to be generated! \r\n");
-    }
+    cy_rslt_t rslt = CY_RSLT_TYPE_ERROR;
+    rslt = mtb_kvstore_read(&kvstore_obj,
+                            "local_irk",
+                            (uint8_t *)&identity_keys,
+                            &data_size);
+    if(identity_keys.key_type_mask == 0)
+        {
+            printf("New Keys need to be generated! \r\n");
+        }
     else
-    {
-        printf("Identity keys are available in the database.\r\n");
-        rslt = mtb_kvstore_read(&kvstore_obj,
-                                "local_irk",
-                                (uint8_t *)&identity_keys,
-                                &data_size);
-        printf("Local identity keys read from Flash: \r\n");
-    }
+        {
+            printf("Identity keys are available in the database.\r\n");
+            printf("Local identity keys read from Flash: \r\n");
+        }
     return rslt;
 }
 
@@ -665,9 +506,15 @@ cy_rslt_t app_bt_update_cccd(uint16_t cccd, uint8_t index)
 
 
 /**
+ * Function Name:
+ * app_bt_find_cccd_bit
+ *
+ * Function Description:
  * @brief This function finds the bit position of the respective CCCD attribute
- * handle
+ *        handle
+ *
  * @param attr_handle CCCD attribute handle
+ *
  * @return uint8_t bit position from LSB
  */
 static uint8_t app_bt_find_cccd_bit(uint16_t attr_handle)
@@ -717,11 +564,17 @@ static uint8_t app_bt_find_cccd_bit(uint16_t attr_handle)
 
 
 /**
+ * Function Name:
+ * app_modify_cccd_in_nv_storage
+ *
+ * Function Description:
  * @brief This function writes 0 or 1 the respective bits for a particular CCCD
  * and writes to NV Storage
  *
  * @param attr_handle attr_handle of the CCCD
  * @param p_val Pointer to the CCCD attribute
+ *
+ * @return void
  */
 void app_modify_cccd_in_nv_storage(uint16_t attr_handle, uint8_t* p_val)
 {
@@ -759,12 +612,19 @@ void app_modify_cccd_in_nv_storage(uint16_t attr_handle, uint8_t* p_val)
 }
 
 /**
+ * Function Name:
+ * app_bt_restore_cccd_using_link_key
+ *
+ * Function Description:
  * @brief Function to copy link key and restore CCCD back from the NV Storage
  *
  * @param p_link_key
+ *
+ * @return cy_rslt_t
  */
 cy_rslt_t app_bt_restore_cccd_using_link_key(wiced_bt_device_link_keys_t *p_link_key)
 {
+    cy_rslt_t status = FALSE;
 
     for(uint8_t count = 0; count < bondinfo.slot_data[NUM_BONDED]; count++)
     {
@@ -832,40 +692,36 @@ cy_rslt_t app_bt_restore_cccd_using_link_key(wiced_bt_device_link_keys_t *p_link
                             app_atvs_atv_read_char_atv_read_cccd[0] = 0x01;
                             break;
 #endif
-                        default:
-                            printf("Unknown Bit position %d\r\n", i);
-                            return FALSE;
-                            break;
                     }
                 }
             }
 
                 printf("cccd_flags value: 0x%x \r\n", bondinfo.cccd_flags[bondindex]);
-                return TRUE;
+                status = TRUE;
             }
 
             break;
         }
     }
 
-    return FALSE;
+    return status;
 }
 
 /*******************************************************************************
  *              Helper APIs
  ******************************************************************************/
 /**
-* Function Name:
-* app_print_bond_data
-*
-* Function Description:
-* @brief This function prints the bond data stored in the Flash
-*
-* @param None
-*
-* @return None
-*
-*/
+ * Function Name:
+ * app_print_bond_data
+ *
+ * Function Description:
+ * @brief This function prints the bond data stored in the Flash
+ *
+ * @param void
+ *
+ * @return void
+ *
+ */
 void app_print_bond_data(void)
 {
     for (uint8_t i = 0; i < bondinfo.slot_data[NUM_BONDED]; i++)
@@ -880,8 +736,15 @@ void app_print_bond_data(void)
 }
 
 /**
+ * Function Name:
+ * app_print_bond_info_stats
+ *
+ * Function Description:
  * @brief Prints the status of bonding information in the NV storage.
  *
+ * @param void
+ *
+ * @return void
  */
 void app_print_bond_info_stats(void)
 {

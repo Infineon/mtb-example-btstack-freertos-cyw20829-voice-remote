@@ -8,7 +8,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -53,6 +53,8 @@
 #include "adc_mic.h"
 #endif
 #include "cyhal_syspm.h"
+#include "app_hw_handler.h"
+
 /*******************************************************************************
 *        Macro Definitions
 *******************************************************************************/
@@ -89,27 +91,26 @@ int cnt = 0;
 
 #endif
 
-audio_state_t audio_cap_state = STREAM_OFF;
-QueueHandle_t audio_q;
-TaskHandle_t audio_task_h;
+static audio_state_t audio_cap_state = STREAM_OFF;
+static QueueHandle_t audio_q;
+static TaskHandle_t audio_task_h;
 
 
 /******************************************************************************
  *                          Function Definitions
  ******************************************************************************/
 
-
-/*******************************************************************************
-* Function Name: send_msg_to_audio_q
-********************************************************************************
-* Summary:
-*  Sends the index(0/1) of the ping pong PCM buffer to the audio queue to
-*  process
-*
-* Parameters:
-*  idx:  Index of the ping pong PCM buffer
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * send_msg_to_audio_q
+ *
+ * @brief  Sends the index(0/1) of the ping pong PCM buffer to the audio queue
+ *         to process.
+ *
+ * @param idx Index of the ping pong PCM buffer
+ *
+ * @return void
+ */
 void send_msg_to_audio_q(uint8_t idx)
 {
     audio_msg_q_pkt_t msg;
@@ -124,13 +125,17 @@ void send_msg_to_audio_q(uint8_t idx)
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/*******************************************************************************
-* Function Name: send_start_streaming_msg
-********************************************************************************
-* Summary:
-*  Sends the message to audio queue to start the audio capture from the MIC
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * send_start_streaming_msg
+ *
+ * @brief Sends the message to audio queue to start the audio capture from the
+ *        MIC.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void send_start_streaming_msg(void)
 {
     audio_msg_q_pkt_t msg;
@@ -142,13 +147,17 @@ void send_start_streaming_msg(void)
     }
 }
 
-/*******************************************************************************
-* Function Name: send_stop_streaming_msg
-********************************************************************************
-* Summary:
-*  Sends the message to audio queue to stop the audio capture from the MIC
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * send_stop_streaming_msg
+ *
+ * @brief Sends the message to audio queue to stop the audio capture from the
+ *        MIC.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void send_stop_streaming_msg(void)
 {
     audio_msg_q_pkt_t msg;
@@ -160,13 +169,16 @@ void send_stop_streaming_msg(void)
     }
 }
 
-/*******************************************************************************
-* Function Name: audio_mic_interface_init
-********************************************************************************
-* Summary:
-*  This function initializes the audio mic interface.
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_mic_interface_init
+ *
+ * @brief  This function initializes the audio mic interface.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void audio_mic_interface_init(void)
 {
 #if defined (PDM_MIC)
@@ -177,13 +189,16 @@ static void audio_mic_interface_init(void)
 
 }
 
-/*******************************************************************************
-* Function Name: audio_mic_cap_start
-********************************************************************************
-* Summary:
-*  This function starts the audio capture from the Analog/PDM Mic .
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_mic_cap_start
+ *
+ * @brief  This function starts the audio capture from the Analog/PDM Mic.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void audio_mic_cap_start(void)
 {
     if(audio_cap_state == STREAM_ON)
@@ -199,13 +214,16 @@ static void audio_mic_cap_start(void)
     audio_cap_state = STREAM_ON;
 }
 
-/*******************************************************************************
-* Function Name: audio_mic_cap_stop
-********************************************************************************
-* Summary:
-*  This function stops the audio capture from the Analog/PDM Mic .
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_mic_cap_stop
+ *
+ * @brief  This function stops the audio capture from the Analog/PDM Mic.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void audio_mic_cap_stop(void)
 {
 
@@ -222,13 +240,16 @@ void audio_mic_cap_stop(void)
     cyhal_syspm_unlock_deepsleep();
 }
 
-/*******************************************************************************
-* Function Name: audio_streaming_stop
-********************************************************************************
-* Summary:
-*  This function stops the audio stream .
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_streaming_stop
+ *
+ * @brief  This function stops the audio stream.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void audio_streaming_stop(void)
 {
     audio_mic_cap_stop();
@@ -266,17 +287,17 @@ void encode_wave_file()
 }
 #endif
 
-/*******************************************************************************
-* Function Name: audio_task
-********************************************************************************
-* Summary:
-*  Encoder Task Handler: This task function initializes the encoder and
-*  processes the audio data for encoding
-*
-* Parameters:
-*  arg: Not used
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_task
+ *
+ * @brief  Encoder Task Handler: This task function initializes the encoder and
+*          processes the audio data for encoding.
+ *
+ * @param arg  Not used
+ *
+ * @return void
+ */
 static void audio_task(void *arg)
 {
     BaseType_t xResult = pdFAIL;
@@ -386,13 +407,16 @@ static void audio_task(void *arg)
 
 }
 
-/*******************************************************************************
-* Function Name: audio_task_init
-********************************************************************************
-* Summary:
-*  This Function creates Encoder task and queue
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * audio_task_init
+ *
+ * @brief  This Function creates Encoder task and queue.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void audio_task_init(void)
 {
     /* Queue Create for Encoder */

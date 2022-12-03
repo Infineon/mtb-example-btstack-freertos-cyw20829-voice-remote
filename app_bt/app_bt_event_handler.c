@@ -12,7 +12,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,18 +46,26 @@
 
 
 /*******************************************************************************
-*        Includes
+*                               Includes
 *******************************************************************************/
 #include "app_bt_event_handler.h"
 #include "app_bt_advert.h"
+#include "app_bt_utils.h"
+#include "app_bt_gatt_handler.h"
 #include "app_hw_handler.h"
 #include "app_bt_bonding.h"
-
+#ifdef ENABLE_BT_SPY_LOG
+#include "cybt_debug_uart.h"
+#else
+#include "cy_retarget_io.h"
+#endif
 #include "wiced_bt_gatt.h"
-#include "wiced_bt_ble.h"
+#if defined (RED_LED_ENABLE)
+#include "app_hw_gpio.h"
+#endif
 
 /*******************************************************************************
-*        Macros
+*                                Macros
 *******************************************************************************/
 
 /* Bitflags for LE secure pairing keys IO capabilities event */
@@ -67,15 +75,15 @@
 #define PAIRING_CAPS_KEY_SIZE       (16u)
 
 /*******************************************************************************
-*        Variable Declarations
+*                               Global Variables
 *******************************************************************************/
 /* Status variable for connection ID */
 uint16_t app_bt_conn_id;
-
+uint8_t stack_init_done = 0;
 uint8_t reset_bond_data = 0;
 
 /*******************************************************************************
-*        Function Prototypes
+*                           Function Prototypes
 *******************************************************************************/
 /* This function initializes Bluetooth sub procedures */
 static void app_bt_init(void);
@@ -83,24 +91,26 @@ static void app_bt_init(void);
 /* This function initializes GATT DB and registers callback for GATT events */
 static void app_bt_gatt_db_init(void);
 
+void create_cpu_sleep_cb(void);
 /*******************************************************************************
  *                          Function Definitions
  ******************************************************************************/
 
-/*
-* Function Name: app_bt_management_callback()
-*
-*@brief
-*  This is a Bluetooth stack event handler function to receive management events
-*  from the Bluetooth LE stack and process as per the application.
-*
-* @param wiced_bt_management_evt_t  Bluetooth LE event code of one byte length
-* @param wiced_bt_management_evt_data_t  Pointer to Bluetooth LE management event
-*                                        structures
-*
-* @return wiced_result_t Error code from WICED_RESULT_LIST or BT_RESULT_LIST
-*
-*/
+/**
+ * Function Name: app_bt_management_callback()
+ *
+ * Function Description:
+ * @brief
+ *  This is a Bluetooth stack event handler function to receive management events
+ *  from the Bluetooth LE stack and process as per the application.
+ *
+ * @param wiced_bt_management_evt_t  Bluetooth LE event code of one byte length
+ * @param wiced_bt_management_evt_data_t  Pointer to Bluetooth LE management event
+ *                                        structures
+ *
+ * @return wiced_result_t Error code from WICED_RESULT_LIST or BT_RESULT_LIST
+ *
+ */
 wiced_result_t
 app_bt_management_callback(wiced_bt_management_evt_t event,
                            wiced_bt_management_evt_data_t *p_event_data)
@@ -115,20 +125,20 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
     printf(app_get_btm_event_name(event));
     printf("\r\n");
 
-    wiced_bt_ble_phy_preferences_t phy = { .tx_phys = BTM_BLE_PREFER_1M_PHY,
-                                             .rx_phys = BTM_BLE_PREFER_1M_PHY,
-                                             .phy_opts = BTM_BLE_PREFER_NO_LELR };
+
 
     switch (event)
     {
 
     case BTM_ENABLED_EVT:
         /* Set Preferred PHY */
-        wiced_bt_ble_set_default_phy(&phy);
 
+        stack_init_done = 1;
         /* Perform application-specific initialization */
         app_bt_init();
-
+#if (!defined  PDM_MIC)  && (!defined ENABLE_BT_SPY_LOG)
+        create_cpu_sleep_cb();
+#endif
         break;
 
     case BTM_BLE_ADVERT_STATE_CHANGED_EVT:
@@ -139,6 +149,22 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
         printf("\r\n");
 
         app_bt_advert_state_handler(*p_adv_mode);
+#if defined (RED_LED_ENABLE)
+        if(p_event_data->ble_advert_state_changed == BTM_BLE_ADVERT_OFF )
+        {
+            // If the condition is true the advert is in off condition //
+            printf("Entered the non advert led section \n");
+            app_status_led_blinky_off(RED);
+
+        }
+         else
+        {
+            // If the condition is false the advert is on on condition //
+            printf("entered the advert led section \n");
+            app_status_led_blinky_on(RED);
+
+        }
+#endif
         break;
 
     case BTM_SECURITY_REQUEST_EVT:
@@ -261,7 +287,7 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
             printf("\r\n");
             /* Delete host info and update bonded list */
         }
-        /* Set Advertising Filter Policy if you do not want pairing 
+        /* Set Advertising Filter Policy if you do not want pairing
          * to happen with other devices */
         // app_bt_set_adv_filter(p_event_data->pairing_complete.bd_addr);
 
@@ -351,12 +377,25 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
         break;
 
     case BTM_BLE_PHY_UPDATE_EVT:
-        printf("BTM_BLE_PHY_UPDATE_EVT\r\n");
+        printf("BTM_BLE_PHY_UPDATE_EVT,\r\n "
+                "PHY Tx value is: %d, \r\n"
+                "PHY Rx value is: %d \r\n",
+                p_event_data->ble_phy_update_event.tx_phy,
+                p_event_data->ble_phy_update_event.rx_phy);
         break;
 
     case BTM_DISABLED_EVT:
         /* Bluetooth Controller and Host Stack Disabled */
         break;
+
+    case BTM_BLE_DATA_LENGTH_UPDATE_EVENT:
+        printf("BTM_BLE_DATA_LENGTH_UPDATE_EVENT, \r\n"
+                "Max tx octets is :%d ,\r\n"
+                "Max rx octets is :%d \r\n",
+                p_event_data->ble_data_length_update_event.max_tx_octets,
+                p_event_data->ble_data_length_update_event.max_rx_octets);
+        break;
+
 
     default:
         printf("\nUnhandled Bluetooth Management Event: %d\r\n", event);
@@ -367,12 +406,43 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
 }
 
 /**
+ * Function Name: hci_trace_cback
+ *
+ * Function Description:
+ *   @brief This callback routes HCI packets to debug uart.
+ *
+ *   @param wiced_bt_hci_trace_type_t type : HCI trace type
+ *   @param uint16_t length : length of p_data
+ *   @param uint8_t* p_data : pointer to data
+ *
+ *   @return None
+ *
+ */
+#ifdef ENABLE_BT_SPY_LOG
+void hci_trace_cback(wiced_bt_hci_trace_type_t type,
+                     uint16_t length, uint8_t* p_data)
+{
+    cybt_debug_uart_send_hci_trace(type, length, p_data);
+}
+#endif
+
+/**
+ * Function Name:
+ * app_bt_init
+ *
+ * Function Description:
  * @brief This Function initializes the Bluetooth functions such as GATT DB
  * initialization, Bonding info and advertisement
  *
+ * @param void
+ *
+ * @return void
  */
 static void app_bt_init(void)
 {
+#ifdef ENABLE_BT_SPY_LOG
+        wiced_bt_dev_register_hci_trace(hci_trace_cback);
+#endif
         wiced_bt_device_address_t local_bda = {0x20, 0x82, 0x9A, 0x00, 0x00, 0x00};
         wiced_bt_set_local_bdaddr( local_bda, BLE_ADDR_PUBLIC);
         wiced_bt_device_address_t  local_device_bd_addr = {0};
@@ -403,8 +473,16 @@ static void app_bt_init(void)
 
 
 /**
+ * Function Name:
+ * app_bt_gatt_db_init
+ *
+ * Function Description:
  * @brief Initialize the Bluetooth LE GATT Database with the necessary services and
  * characteristics and register GATT callback function.
+ *
+ * @param void
+ *
+ * @return void
  *
  */
 static void app_bt_gatt_db_init(void)

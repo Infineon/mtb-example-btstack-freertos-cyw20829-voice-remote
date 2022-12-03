@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -42,20 +42,13 @@
 #define __APP_BT_BONDING_H_
 
 /*******************************************************************************
-*        Header Files
+*                           Header Files
 *******************************************************************************/
 #include "wiced_bt_stack.h"
-#include "cybsp.h"
-#include "cyhal.h"
-#include "cy_retarget_io.h"
-#include <FreeRTOS.h>
-#include <task.h>
-#include "cycfg_bt_settings.h"
-#include <queue.h>
 #include "mtb_kvstore.h"
 
 /*******************************************************************************
-*        Macro Definitions
+*                           Macro Definitions
 *******************************************************************************/
 /* Max number of bonded devices */
 #define  BOND_MAX                            (4u)
@@ -69,9 +62,9 @@
 #define  QSPI_BUS_FREQ                       (50000000l)
 #define  QSPI_GET_ERASE_SIZE                 (0)
 
-/*******************************************************************
- * Variable Definitions
- ******************************************************************/
+/*******************************************************************************
+ *                          Global Variables
+ ******************************************************************************/
 /* Structure to store info that goes into serial flash -
  * it holds the number of bonded devices, remote keys and local keys
  */
@@ -93,7 +86,9 @@ typedef struct
     uint8_t                            cccd_flags[BOND_MAX];
 }tBondInfo;
 
-extern wiced_bt_local_identity_keys_t  identity_keys;                  /* Local Indentity Key */
+/* Local Indentity Key */
+extern wiced_bt_local_identity_keys_t  identity_keys;
+
 extern tBondInfo bondinfo;
 
 /* enum for bondinfo structure */
@@ -109,12 +104,9 @@ extern  mtb_kvstore_bd_t                        block_device;
 /* Array Index of the current peer device */
 extern uint8_t                                  bondindex;
 
-/* Object for kvstore library */
-extern mtb_kvstore_t                            kvstore_obj;
-
-/*******************************************************************
- * Function Prototypes
- ******************************************************************/
+/*******************************************************************************
+ *                      Function Prototypes
+ ******************************************************************************/
 
 /* QSPI and driver Init API for Non-volatile storage */
 void app_kv_store_init(void);

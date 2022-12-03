@@ -6,7 +6,7 @@
 *              more meaningful information.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -48,21 +48,21 @@
 #include "app_hw_handler.h"
 
 
-/****************************************************************************
+/*******************************************************************************
  *                              FUNCTION DEFINITIONS
- ***************************************************************************/
-/*
- Function Name:
- app_get_btm_event_name
-
- Function Description:
- @brief  The function converts the wiced_bt_management_evt_t enum value to its
-         corresponding string literal. This will help the programmer to debug
-         easily with log traces without navigating through the source code.
-
- @param event   Bluetooth management event type
-
- @return wiced_bt_management_evt_t
+ ******************************************************************************/
+/**
+ * Function Name:
+ * app_get_btm_event_name
+ *
+ * Function Description:
+ * @brief  The function converts the wiced_bt_management_evt_t enum value to its
+ *         corresponding string literal. This will help the programmer to debug
+ *         easily with log traces without navigating through the source code.
+ *
+ * @param event   Bluetooth management event type
+ *
+ * @return wiced_bt_management_evt_t
  */
 const char *app_get_btm_event_name(wiced_bt_management_evt_t event)
 {
@@ -102,26 +102,28 @@ const char *app_get_btm_event_name(wiced_bt_management_evt_t event)
     CASE_RETURN_STR(BTM_SCO_CONNECTION_REQUEST_EVT)
     CASE_RETURN_STR(BTM_SCO_CONNECTION_CHANGE_EVT)
     CASE_RETURN_STR(BTM_BLE_CONNECTION_PARAM_UPDATE)
+    CASE_RETURN_STR(BTM_BLE_DATA_LENGTH_UPDATE_EVENT)
+
 #ifdef CYW20819A1
     CASE_RETURN_STR(BTM_BLE_PHY_UPDATE_EVT)
 #endif
     }
 
-    return (NULL);
+    return ("unknown");
 }
 
-/*
- Function Name:
- app_get_btm_advert_mode_name
-
- Function Description:
- @brief  The function converts the wiced_bt_ble_advert_mode_t enum value to its
-        corresponding string literal. This will help the programmer to debug
-        easily with log traces without navigating through the source code.
-
- @param mode   Bluetooth advertisement mode type
-
- @return wiced_bt_ble_advert_mode_t
+/**
+ * Function Name:
+ * app_get_btm_advert_mode_name
+ *
+ * Function Description:
+ * @brief  The function converts the wiced_bt_ble_advert_mode_t enum value to its
+ *        corresponding string literal. This will help the programmer to debug
+ *        easily with log traces without navigating through the source code.
+ *
+ * @param mode   Bluetooth advertisement mode type
+ *
+ * @return wiced_bt_ble_advert_mode_t
  */
 const char *app_get_btm_advert_mode_name(wiced_bt_ble_advert_mode_t mode)
 {
@@ -141,22 +143,22 @@ const char *app_get_btm_advert_mode_name(wiced_bt_ble_advert_mode_t mode)
 
     }
 
-    return (NULL);
+    return ("unknown");
 }
 
 
-/*
- Function Name:
- app_get_gatt_disconn_reason_name
-
- Function Description:
- @brief  The function converts the wiced_bt_gatt_disconn_reason_t enum value to
-        its corresponding string literal. This will help the programmer to debug
-        easily with log traces without navigating through the source code.
-
- @param reason   GATT Disconnection reason
-
- @return wiced_bt_gatt_disconn_reason_t
+/**
+ * Function Name:
+ * app_get_gatt_disconn_reason_name
+ *
+ * Function Description:
+ * @brief  The function converts the wiced_bt_gatt_disconn_reason_t enum value to
+ *        its corresponding string literal. This will help the programmer to debug
+ *        easily with log traces without navigating through the source code.
+ *
+ * @param reason   GATT Disconnection reason
+ *
+ * @return wiced_bt_gatt_disconn_reason_t
  */
 const char *app_get_gatt_disconn_reason_name(wiced_bt_gatt_disconn_reason_t reason)
 {
@@ -176,22 +178,22 @@ const char *app_get_gatt_disconn_reason_name(wiced_bt_gatt_disconn_reason_t reas
     }
 
     printf("Unknown Reason\r\n");
-    return (NULL);
+    return ("unknown");
 }
 
 
-/*
- Function Name:
- get_gatt_status_name
-
- Function Description:
- @brief  The function converts the wiced_bt_gatt_status_t enum value to its
-        corresponding string literal. This will help the programmer to debug
-        easily with log traces without navigating through the source code.
-
- @param status   GATT status
-
- @return wiced_bt_gatt_status_t
+/**
+ * Function Name:
+ * get_gatt_status_name
+ *
+ * Function Description:
+ * @brief  The function converts the wiced_bt_gatt_status_t enum value to its
+ *        corresponding string literal. This will help the programmer to debug
+ *        easily with log traces without navigating through the source code.
+ *
+ * @param status   GATT status
+ *
+ * @return wiced_bt_gatt_status_t
  */
 const char *app_get_gatt_status_name(wiced_bt_gatt_status_t status)
 {
@@ -240,13 +242,18 @@ const char *app_get_gatt_status_name(wiced_bt_gatt_status_t status)
 
     }
 
-    return (NULL);
+    return ("unknown");
 }
 
 /**
+ * Function Name:
+ * app_get_pairing_status_name
+ *
+ * Function Description:
  * @brief Get the pairing status
  *
  * @param smp_status security manager status
+ *
  * @return const char* pairing status string
  */
 const char *app_get_pairing_status_name(wiced_bt_smp_status_t smp_status)
@@ -281,12 +288,14 @@ const char *app_get_pairing_status_name(wiced_bt_smp_status_t smp_status)
         CASE_RETURN_STR(SMP_CONN_TOUT)
 
     }
-    return (NULL);
+    return ("unknown");
 }
 
-/*
- * Function Name: app_print_bd_address()
+/**
+ * Function Name:
+ * app_print_bd_address
  *
+ * Function Description:
  * @brief This utility function prints the address of the Bluetooth device
  *
  * @param wiced_bt_device_address_t  Bluetooth address
@@ -305,11 +314,17 @@ void app_print_bd_address(wiced_bt_device_address_t bdadr)
 }
 
 /**
+ * Function Name:
+ * app_print_byte_array
+ *
+ * Function Description:
  * @brief This is a utility function that prints the specified number of values
  * from memory
  *
  * @param to_print Address of the location to print from
  * @param len Number of bytes to be printed from the starting address
+ *
+ * @return void
  */
 void app_print_byte_array(void *to_print, uint16_t len)
 {

@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,10 +43,20 @@
 /*******************************************************************************
  *                                Include Headers
  ******************************************************************************/
+#include "app_bt_hid.h"
 #include "app_bt_hid_atv.h"
 #include "app_bt_event_handler.h"
 #include "app_bt_gatt_handler.h"
-#include "GeneratedSource/cycfg_gatt_db.h"
+#include "app_bt_utils.h"
+#include "app_hw_handler.h"
+#include "cycfg_gatt_db.h"
+#include "audio.h"
+
+/*******************************************************************************
+*        Macro Definitions
+*******************************************************************************/
+/* Length in bytes as specified in the Voice over BLE specification */
+#define ATVS_READ_CHAR_LEN              (134)
 
 /*******************************************************************************
  *                            Global Variables
@@ -101,15 +111,25 @@ static void app_start_adpcm_transfer(void );
 static void app_stop_adpcm_transfer(void);
 
 static void app_atv_audio_cmd_dispatcher(uint8_t cmd);
-
+#ifdef VOICE_REMOTE
 static uint16_t find_hid_cc_code(uint8_t keyCode);
+#endif
+static void app_audio_timer_cb(TimerHandle_t cb_params);
 
 /*******************************************************************************
  *                              FUNCTION DEFINITIONS
  ******************************************************************************/
-
+#ifdef VOICE_REMOTE
 /**
+ * Function Name:
+ * find_hid_cc_code
+ *
+ * Function Description:
  * @brief This is a search function with offset for key map with gaps.
+ *
+ * @param uint8_t keyCode from KeyScan driver
+ *
+ * @return uint16_t HID Consumer control code
  *
  */
 uint16_t find_hid_cc_code(uint8_t keyCode)
@@ -131,10 +151,20 @@ uint16_t find_hid_cc_code(uint8_t keyCode)
         return 0; // Not a valid keycode
     }
 }
+#endif
 
 /**
+ * Function Name:
+ * app_send_report
+ *
+ * Function Description:
  * @brief Sends HID reports based on the usage page and keys available and
  * configured.
+ *
+ * @param uint8_t keyCode from KeyScan driver
+ * @param uint8_t upDownFlag to indicate keypressed or released
+ *
+ * @return void
  *
  */
 void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
@@ -142,7 +172,12 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
     wiced_bt_gatt_status_t gatt_status = WICED_BT_GATT_SUCCESS;
 
     // check for valid keycode and get the hid code for the key code
-    uint16_t hid_cc_code = find_hid_cc_code(keyCode);
+    uint16_t hid_cc_code;
+    #ifdef VOICE_REMOTE
+    hid_cc_code = find_hid_cc_code(keyCode);
+    #else
+    hid_cc_code=HID_CC_MIC;
+    #endif
 
     if(hid_cc_code)
     {
@@ -175,7 +210,7 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
                         printf("Failed to start audio timer!\r\n");
                         CY_ASSERT(0);
                     }
-                    printf("%d \r\n",wiced_bt_gatt_get_bearer_mtu(0));
+                    printf("GATT Bearer MTU: %d \r\n",wiced_bt_gatt_get_bearer_mtu(0));
                     printf("audio timer started!\r\n");
                 }
             }
@@ -211,9 +246,15 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
 
 
 /**
+ * Function Name:
+ * app_atv_audio_event_handler
+ *
+ * Function Description:
  * @brief Android TV Transport Implementation : Handling ATV write char
  *
  * @param atv_command Command received from the GATT write operation
+ *
+ * @return void
  */
 void app_atv_audio_event_handler(uint8_t* atv_command)
 {
@@ -258,9 +299,15 @@ void app_atv_audio_event_handler(uint8_t* atv_command)
 }
 
 /**
+ * Function Name:
+ * app_atv_audio_cmd_dispatcher
+ *
+ * Function Description:
  * @brief Android TV Transport Implementation : Handling ATV control char
  *
  * @param cmd Command is the type of message specified in the spec.
+ *
+ * @return void
  */
 void app_atv_audio_cmd_dispatcher(uint8_t cmd)
 {
@@ -370,10 +417,17 @@ void app_atv_audio_cmd_dispatcher(uint8_t cmd)
 
 
 /**
+ * Function Name:
+ * app_start_adpcm_transfer
+ *
+ * Function Description:
  * @brief Start ADPCM Encoding and send over the Bluetooth LE
  *
+ * @param void
+ *
+ * @return void
  */
-static void app_start_adpcm_transfer(void )
+static void app_start_adpcm_transfer(void)
 {
     send_start_streaming_msg();
     g_seq_id = 0;
@@ -381,10 +435,17 @@ static void app_start_adpcm_transfer(void )
 
 
 /**
+ * Function Name:
+ * app_stop_adpcm_transfer
+ *
+ * Function Description:
  * @brief Stop ADPCM Encoding and stop sending over Bluetooth LE
  *
+ * @param void
+ *
+ * @return void
  */
-static void app_stop_adpcm_transfer(void )
+static void app_stop_adpcm_transfer(void)
 {
 
     send_stop_streaming_msg();
@@ -395,9 +456,14 @@ static void app_stop_adpcm_transfer(void )
 }
 
 /**
+ * Function Name:
+ * app_send_adpcm_data
+ * Function Description:
  * @brief Send ADPCM data over Bluetooth LE
  *
- * @param enc_buffer The encoded buffer
+ * @param uint8_t* enc_buffer The encoded buffer
+ *
+ * @return void
  */
 void app_send_adpcm_data(uint8_t *enc_buffer)
 {
@@ -411,7 +477,7 @@ void app_send_adpcm_data(uint8_t *enc_buffer)
 
     gatt_status = wiced_bt_gatt_server_send_notification(app_bt_conn_id,
                                                     HDLC_ATVS_ATV_READ_CHAR_VALUE,
-                                                    app_atvs_atv_read_char_len,
+                                                    ATVS_READ_CHAR_LEN,
                                                     enc_buffer,
                                                     NULL);
 
@@ -421,7 +487,7 @@ void app_send_adpcm_data(uint8_t *enc_buffer)
                xTaskNotifyWait(0, 0, &ulNotifiedValue, portMAX_DELAY);
                gatt_status = wiced_bt_gatt_server_send_notification(app_bt_conn_id,
                                                                HDLC_ATVS_ATV_READ_CHAR_VALUE,
-                                                               app_atvs_atv_read_char_len,
+                                                               ATVS_READ_CHAR_LEN,
                                                                enc_buffer,
                                                                NULL);
         }
@@ -430,8 +496,15 @@ void app_send_adpcm_data(uint8_t *enc_buffer)
 
 
 /**
+ * Function Name:
+ * app_audio_timer_create
+ *
+ * Function Description:
  * @brief Timer init for mic open and close
  *
+ * @param void
+ *
+ * @return void
  */
 void app_audio_timer_create(void)
 {
@@ -450,20 +523,33 @@ void app_audio_timer_create(void)
 }
 
 /**
-* @brief Timer callback to stop streaming voice
-*
-* @param cb_params argument to the callback
-*/
-void app_audio_timer_cb(TimerHandle_t cb_params)
+ * Function Name:
+ * app_audio_timer_cb
+ *
+ * Function Description:
+ * @brief Timer callback to stop streaming voice
+ *
+ * @param cb_params argument to the callback
+ *
+ * @return void
+ */
+static void app_audio_timer_cb(TimerHandle_t cb_params)
 {
    (void)cb_params;
     app_stop_adpcm_transfer();
-    printf("15 sec Voice Timed ou. Num of Congestions: %u\r\n", num_of_congestions);
+    printf("15 sec Voice Timed out. Num of Congestions: %u\r\n", num_of_congestions);
 }
 
 /**
+ * Function Name:
+ * app_check_n_kill_timer
+ *
+ * Function Description:
  * @brief This function stops the active timer.
  *
+ * @param void
+ *
+ * @return void
  */
 void app_check_n_kill_timer(void)
 {
@@ -478,10 +564,16 @@ void app_check_n_kill_timer(void)
 }
 
 /**
-* @brief Function to send battery level percentage
-*
-* @param battery_percentage Battery level value in percentage
-*/
+ * Function Name:
+ * app_send_batt_report
+ *
+ * Function Description:
+ * @brief Function to send battery level percentage
+ *
+ * @param battery_percentage Battery level value in percentage
+ *
+ * @return void
+ */
 void app_send_batt_report(uint8_t battery_percentage)
 {
 

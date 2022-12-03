@@ -6,7 +6,7 @@
 *              callbacks.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,8 +46,6 @@
  *                              INCLUDES
  ******************************************************************************/
 #include "wiced_bt_gatt.h"
-#include "wiced_bt_l2c.h"
-#include "wiced_memory.h"
 
 /*******************************************************************************
  *                              CONSTANTS
@@ -61,7 +59,7 @@
 /* Maximum Connection Interval */
 #define MAX_CI                                  (24u)
 /* Slave Latency */
-#define SLAVE_LATENCY                           (9u)
+#define SLAVE_LATENCY                           (33u)
 /* Supervision Timeout */
 #define SUPERVISION_TO                          (500u)
 

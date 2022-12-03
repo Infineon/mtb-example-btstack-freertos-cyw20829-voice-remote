@@ -41,6 +41,7 @@
 #include "audio.h"
 #include "stdio.h"
 #include "app_bt_hid.h"
+#include "app_hw_handler.h"
 
 /*******************************************************************************
 *        Macro Definitions
@@ -82,19 +83,20 @@ uint16_t  xmit_drop_pkt_cnt;
  *                          Function Definitions
  ******************************************************************************/
 
-
-/*******************************************************************************
-* Function Name: send_msg_to_xmit_q
-********************************************************************************
-* Summary:
-*  Sends the index of the buffer from encoded buffer pool to the xmit queue to
-*  further processing.
-*
-* Parameters:
-*  idx:  Index of the buffer
-*  len:  Length of the Encoded packet
-*
-*******************************************************************************/
+/**
+ * Function name:
+ * send_msg_to_xmit_q
+ *
+ * Function Description:
+ * @brief  Sends the index of the buffer from encoded buffer pool to the xmit queue to
+ *         further processing.
+ *
+ * @param idx Index of the buffer
+ * @param len Length of the Encoded packet
+ *
+ *
+ * @return void
+ */
 void send_msg_to_xmit_q(uint8_t idx, uint16_t len)
 {
     xmit_msg_q_pkt_t msg;
@@ -121,13 +123,17 @@ void send_msg_to_xmit_q(uint8_t idx, uint16_t len)
 
 }
 
-/*******************************************************************************
-* Function Name: send_stop_msg_to_xmit_q
-********************************************************************************
-* Summary:
-*  Sends the stop message to xmit queue to stop sending
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * send_stop_msg_to_xmit_q
+ *
+ * Function Description:
+ * @brief  Sends the stop message to xmit queue to stop sending.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void send_stop_msg_to_xmit_q(void)
 {
     xmit_msg_q_pkt_t msg;
@@ -138,18 +144,18 @@ void send_stop_msg_to_xmit_q(void)
       }
 }
 
-
-/*******************************************************************************
-* Function Name: xmit_task
-********************************************************************************
-* Summary:
-*  Encoder Task Handler: This task function receives the encoded audio packet
-*  and sends the packet over air using defined transport
-*
-* Parameters:
-*  arg: Not used
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * xmit_task
+ *
+ * Function Description:
+ * @brief  Encoder Task Handler: This task function receives the encoded audio
+ *         packet and sends the packet over air using defined transport
+ *
+ * @param arg Not used
+ *
+ * @return void
+ */
 static void xmit_task(void *arg)
 {
     BaseType_t xResult = pdFAIL;
@@ -189,13 +195,17 @@ static void xmit_task(void *arg)
 
 }
 
-/*******************************************************************************
-* Function Name: xmit_task_init
-********************************************************************************
-* Summary:
-*  This Function creates Encoder task and queue
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * xmit_task_init
+ *
+ * Function Description:
+ * @brief  This Function creates Encoder task and queue
+ *
+ * @param void
+ *
+ * @return void
+ */
 void xmit_task_init(void)
 {
     /* Queue Create for Transmit Task */

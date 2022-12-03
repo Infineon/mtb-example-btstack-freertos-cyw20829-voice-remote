@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -89,7 +89,7 @@ typedef struct
 
 
 /* Opus encoder configuration parameters */
-cy_opus_enc_cfg_t opus_enc_cfg =
+static cy_opus_enc_cfg_t opus_enc_cfg =
 {
     .sampling_rate = AUDIO_SAMPLING_RATE,
     .bitrate = OPUS_ENC_BITRATE,
@@ -106,18 +106,18 @@ cy_opus_enc_cfg_t opus_enc_cfg =
  *                          Function Definitions
  ******************************************************************************/
 
-
-/*******************************************************************************
-* Function Name: int_to_char
-********************************************************************************
-* Summary:
-*  Converts integer to character
-*
-* Parameters:
-*  i:  The input integer
-*  ch: Stores the converted character
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * int_to_char
+ *
+ * @brief  Converts integer to character
+ *
+ * @param i The input integer
+ *
+ * @param ch Stores the converted character
+ *
+ * return void
+ */
 static void int_to_char(uint32_t i, unsigned char ch[4])
 {
     ch[0] = i>>24;
@@ -126,20 +126,16 @@ static void int_to_char(uint32_t i, unsigned char ch[4])
     ch[3] = i&0xFF;
 }
 
-
-/*******************************************************************************
-* Function Name: cy_opus_encode
-********************************************************************************
-* Summary:
-*  Reads the PCM buffer and runs Opus encoder to compress
-*
-* Parameters:
-*  config: Pointer to Encoder Configuration
-*
-* Return:
-*   length of encoded Samples
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_opus_encode
+ *
+ * @brief  Reads the PCM buffer and runs Opus encoder to compress
+ *
+ * @param config Pointer to Encoder Configuration
+ *
+ * @return uint16_t length of encoded Samples
+ */
 static uint16_t cy_opus_encode(cy_opus_enc_cfg_t *config)
 {
     uint16_t len;
@@ -192,17 +188,17 @@ static uint16_t cy_opus_encode(cy_opus_enc_cfg_t *config)
     return (len + OPUS_ENC_HEADER_SIZE);
 }
 
-/*******************************************************************************
-* Function Name: cy_opus_enc_init
-********************************************************************************
-* Summary:
-*  This function creates Opus encoder with the given Encoder configuration and
-*  configures the encoder for CELT codec only
-*
-* Parameters:
-*  config: Pointer to Encoder Configuration
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_opus_enc_init
+ *
+ * @brief This function creates Opus encoder with the given Encoder configuration
+ *        and configures the encoder for CELT codec only
+ *
+ * @param config  Pointer to Encoder Configuration
+ *
+ * @return void
+ */
 static void cy_opus_enc_init(cy_opus_enc_cfg_t *config)
 {
     int err;
@@ -251,32 +247,31 @@ static void cy_opus_enc_init(cy_opus_enc_cfg_t *config)
 
 }
 
-
-/*******************************************************************************
-* Function Name: cy_encoder_init
-********************************************************************************
-* Summary:
-*  This function invokes Opus Encoder Initialization
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encoder_init
+ *
+ * @brief  This function invokes Opus Encoder Initialization
+ *
+ * @param void
+ *
+ * return void
+ */
 void cy_encoder_init(void)
 {
     cy_opus_enc_init(&opus_enc_cfg);
 }
 
-/*******************************************************************************
-* Function Name: cy_encode
-********************************************************************************
-* Summary:
-* This Function invokes the Opus Encoder api to encode the audio data
-*
-* Parameters:
-*  ip_samples: Input Audio Samples to encoder
-*  op_frame: Encoded Audio frame given by Opus Encoder
-*
-* Return:
-*   length of Encoded Audio Packet
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encode
+ *
+ * @brief  This Function invokes the Opus Encoder api to encode the audio data
+ *
+ * @param ip_samples  Input Audio Samples to encoder
+ * @param op_frame Encoded Audio frame given by Opus Encoder
+ * @return uint16_t opus packet length
+ */
 uint16_t cy_encode(int16_t *ip_samples, uint8_t *op_frame)
 {
     uint16_t opus_pkt_len;
@@ -289,13 +284,16 @@ uint16_t cy_encode(int16_t *ip_samples, uint8_t *op_frame)
     return opus_pkt_len;
 }
 
-/*******************************************************************************
-* Function Name: cy_encoder_reset
-********************************************************************************
-* Summary:
-*  This function resets the Encoder State
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encoder_reset
+ *
+ * @brief  This function resets the Encoder State
+ *
+ * @param void
+ *
+ * @return void
+ */
 void cy_encoder_reset(void)
 {
     return ;

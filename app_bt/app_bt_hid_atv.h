@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,7 +45,9 @@
  ******************************************************************************/
 #ifndef __APP_BT_HID_ATV_H__
 #define __APP_BT_HID_ATV_H__
-#include "app_bt_hid.h"
+
+#include "FreeRTOS.h"
+#include "timers.h"
 
 /*******************************************************************************
  *                                Constants
@@ -183,8 +185,6 @@ extern TimerHandle_t pair_mode_timer_h;
 void app_send_report(uint8_t keyCode, uint8_t upDownFlag);
 
 void app_audio_timer_create(void);
-
-void app_audio_timer_cb(TimerHandle_t cb_params);
 
 void app_send_adpcm_data(uint8_t *enc_buffer);
 

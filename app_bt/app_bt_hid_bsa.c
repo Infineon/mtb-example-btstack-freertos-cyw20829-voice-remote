@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,9 +43,13 @@
  *                              INCLUDE HEADERS
  ******************************************************************************/
 #include "app_bt_hid_bsa.h"
+#include "app_bt_hid.h"
 #include "audio.h"
-#include "GeneratedSource/cycfg_gatt_db.h"
+#include "cycfg_gatt_db.h"
 #include "app_bt_event_handler.h"
+#include "app_bt_gatt_handler.h"
+#include "stdlib.h"
+#include "app_hw_handler.h"
 
 /*******************************************************************************
  *                              GLOBAL VARIABLES
@@ -110,39 +114,56 @@ static void app_send_start_voice_ctl_msg(void);
  ******************************************************************************/
 
 /**
- * @brief Compare function for bsearch
+ * Function Name:
+ * find_hid_index
  *
- * @param a Pointer to the first operand
- * @param b Pointer to the second operand
- * @return int 0 if same ; +1 or -1 if one of the operand is larger
+ * Function Description:
+ * @brief Find the index in the keyusage table.
+ *
+ * @param keyCode uint8_t keyCode from keyscan driver.
+ *
+ * @return int index for the respective keycode.
  */
-int key_compare(const void *a, const void *b)
-{
-    key_usage_t *x = (key_usage_t*)a ;
-    key_usage_t *y = (key_usage_t*)b ;
-    if(x->kc > y->kc) return 1;
-    if(x->kc < y->kc) return -1;
-    return 0;
-}
+int find_hid_index(uint8_t keyCode)
+    {
+        if( (keyCode >= KC_MUTE) && (keyCode <= KC_PAGE_DOWN) )
+        {
+            return keyCode - KEYCODE_OFFSET2;
+        }
+        else if(keyCode == KC_MULTIFUNCTION)
+        {
+            return keyCode - KC_MULTIFUNCTION;
+        }
+        else if(keyCode == KC_POWER)
+        {
+            return keyCode - KEYCODE_OFFSET1;
+        }
+        else
+        {
+            return 0; // Not a valid keycode
+        }
+    }
 
 
 /**
- * @brief Sends HID reports based on the usage page and keys available and
- * configured.
- * It also decides between Keyboard usage page and Consumer Usage page.
+ * Function Name:
+ * app_send_report
  *
+ * Function Description:
+ * @brief Sends HID reports based on the usage page and keys available and
+ * configured. This function also decides between Keyboard usage page and Consumer
+ * Usage page.
+ *
+ * @param keyCode uint8_t keyCode from keyscan driver
+ * @param upDownFlag uint8_t Key pressed or released flag
+ *
+ * @return void
  */
 void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
 {
+    int key_table_index = find_hid_index(keyCode);
 
-    // Check for vaild keycode in the keyusage_table
-    key_usage_t key = { .kc = keyCode, };
-    key_usage_t *key_p = &key;
-    key_p = bsearch(&key,
-                    keyusage_table,
-                    TOTAL_KEYS,
-                    sizeof(key_usage_t),
-                    key_compare );
+    key_usage_t *key_p = (key_usage_t*)&keyusage_table[key_table_index];
 
     if(key_p != NULL)
     {
@@ -212,7 +233,7 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
                     }
                 }
 
-                 if(KC_HOME == keyCode)
+                if(KC_HOME == keyCode)
                 {
                     if (pdPASS != xTimerStart(pair_mode_timer_h, 10u))
                     {
@@ -269,8 +290,15 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
 
 
 /**
+ * Function Name:
+ * app_send_voice_in_report
+ *
+ * Function Description:
  * @brief Sends Dummy opus data for BSA compatibility
  *
+ * @param p_buf uint8_t* pointer for audio data
+ *
+ * @return void
  */
 void app_send_voice_in_report(uint8_t *p_buf)
 {
@@ -298,9 +326,14 @@ void app_send_voice_in_report(uint8_t *p_buf)
 }
 
 /**
+ * Function Name:
+ * app_bsa_audio_event_handler
+ * Function Description:
  * @brief Function to start or stop audio
  *
  * @param bsa_command Data written to voice feature report
+ *
+ * @return void
  */
 void app_bsa_audio_event_handler(uint8_t* bsa_command)
 {
@@ -320,8 +353,15 @@ void app_bsa_audio_event_handler(uint8_t* bsa_command)
 }
 
 /**
+ * Function Name:
+ * app_send_start_voice_ctl_msg
+ *
+ * Function Description:
  * @brief This is a BSA specific OPUS implementation for voice control
  *
+ * @param void
+ *
+ * @return void
  */
 static void app_send_start_voice_ctl_msg(void)
 {
@@ -350,8 +390,15 @@ static void app_send_start_voice_ctl_msg(void)
 }
 
 /**
+ * Function Name:
+ * app_send_stop_voice_ctl_msg
+ *
+ * Function Description:
  * @brief This is a BSA specific OPUS implementation for voice control
  *
+ * @param void
+ *
+ * @return void
  */
 static void app_send_stop_voice_ctl_msg(void)
 {
@@ -372,10 +419,12 @@ static void app_send_stop_voice_ctl_msg(void)
 
 
 /**
-* @brief Function to send battery level percentage
-*
-* @param battery_percentage Battery level value in percentage
-*/
+ * @brief Function to send battery level percentage
+ *
+ * @param battery_percentage Battery level value in percentage
+ *
+ * @return void
+ */
 void app_send_batt_report(uint8_t battery_percentage)
 {
 

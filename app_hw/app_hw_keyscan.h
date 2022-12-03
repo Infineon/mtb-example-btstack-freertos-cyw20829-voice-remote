@@ -1,11 +1,11 @@
 /*******************************************************************************
-* File Name: app_hw_keyscan.c
+* File Name: app_hw_keyscan.h
 *
 * Description: This file consists of the function prototypes that are
 *              necessary for developing Keyscan use cases.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -43,23 +43,10 @@
 /*******************************************************************************
  *                              INCLUDES
  ******************************************************************************/
-#include "cy_keyscan.h"
-#include "cy_sysint.h"
-#include <FreeRTOS.h>
-#include <task.h>
-#include <queue.h>
-#include "app_bt_hid.h"
-#include "cycfg_peripherals.h"
-
 
 /*******************************************************************************
  *                              CONSTANTS
  ******************************************************************************/
-
-//#define TEST_DEEPSLEEP
-
-#define MAX_NOOF_ROWS           (3U)
-#define MAX_NOOF_COLUMNS        (10U)
 #define TICKS_TO_WAIT           (10u)
 
 /*******************************************************************************
@@ -78,10 +65,8 @@ typedef enum app_keyscan_status_t
  ******************************************************************************/
 
 void keyscan_task(void *args);
-void key_detected_callback(void);
-int app_configure_keyscan(void);
-app_keyscan_status_t app_keyscan_handler_init(void);
-app_keyscan_status_t app_keyscan_interrupt_init(void);
-
+void smif_disable();
+void smif_enable();
+void keyscan_task_init(void);
 
 #endif

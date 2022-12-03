@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -67,31 +67,33 @@ dvi_adpcm_state_t g_adpcm_state;
  *                          Function Definitions
  ******************************************************************************/
 
-/*******************************************************************************
-* Function Name: cy_encoder_init
-********************************************************************************
-* Summary:
-*  This function invokes ADPCM Encoder Initialization
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encoder_init
+ *
+ * @brief  This function invokes ADPCM Encoder Initialization
+ *
+ * @param void
+ *
+ * @return void
+ */
 void cy_encoder_init(void)
 {
     dvi_adpcm_init(&g_adpcm_state);
 }
 
-/*******************************************************************************
-* Function Name: cy_encode
-********************************************************************************
-* Summary:
-* This Function invokes the ADPCM Encoder api to encode the audio data
-*
-* Parameters:
-*  ip_samples: Input Audio Samples to encoder
-*  op_frame: Encoded Audio frame given by ADPCM Encoder
-*
-* Return:
-*   length of Encoded Audio Packet
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encode
+ *
+ * @brief  This Function invokes the ADPCM Encoder api to encode the audio data.
+ *
+ * @param ip_samples  Input Audio Samples to encoder
+ *
+ * @param op_frame  Encoded Audio frame given by ADPCM Encoder
+ *
+ * @return uint16_t cy_encode length of Encoded Audio Packet
+ */
 uint16_t cy_encode(int16_t *ip_samples, uint8_t *op_frame)
 {
     int adpcm_pkt_len;
@@ -101,13 +103,16 @@ uint16_t cy_encode(int16_t *ip_samples, uint8_t *op_frame)
     return (int16_t)adpcm_pkt_len;
 }
 
-/*******************************************************************************
-* Function Name: cy_encoder_reset
-********************************************************************************
-* Summary:
-*  This function resets the Encoder State
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * cy_encoder_reset
+ *
+ * @brief  This function resets the Encoder State.
+ *
+ * @param void
+ *
+ * @return void
+ */
 void cy_encoder_reset(void)
 {
     dvi_adpcm_init(&g_adpcm_state);

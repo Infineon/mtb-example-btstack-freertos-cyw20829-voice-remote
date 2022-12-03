@@ -113,7 +113,7 @@
                                         <Field>
                                             <FieldProperties>
                                                 <Property id="Name" value="Slave Latency"/>
-                                                <Property id="Value" value="9"/>
+                                                <Property id="Value" value="33"/>
                                                 <Property id="Format" value="f_uint16"/>
                                             </FieldProperties>
                                         </Field>

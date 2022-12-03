@@ -21,7 +21,7 @@
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
- * http://www.Cypress.com
+ * http://www.infineon.com
  *
  *
  * 1 tab == 4 spaces!
@@ -44,7 +44,6 @@
  *----------------------------------------------------------*/
 
 /* Ensure definitions are only used by the compiler, and not the assembler. */
-#if defined(__STDC__) || defined(__cplusplus__)
 
 #include <stdio.h>
 #include <string.h>
@@ -53,92 +52,7 @@
 
 extern uint32_t SystemCoreClock;
 
-/* The function that implements FreeRTOS printf style output, and the macro
- * that maps the configPRINTF() macros to that function. */
-extern void vLoggingPrintf( const char * pcFormat, ... );
-#define configPRINTF( X )    vLoggingPrintf X
-
-/* Non-format version thread-safe print */
-extern void vLoggingPrint( const char * pcMessage );
-#define configPRINT( X )     vLoggingPrint( X )
-
-/* Assert call defined for debug builds. */
-extern void vAssertCalled( const char * pcFile,
-                           uint32_t ulLine );
-//#define configASSERT( x )    if( ( x ) == 0 ) vAssertCalled( __FILE__, __LINE__ )
-
 #define configASSERT( x ) if( ( x ) == 0 ) { taskDISABLE_INTERRUPTS(); for( ;; ); }
-#endif
-
-/* Sets the length of the buffers into which logging messages are written - so
- * also defines the maximum length of each log message. */
-#define configLOGGING_MAX_MESSAGE_LENGTH            100
-
-/* Set to 1 to prepend each log message with a message number, the task name,
- * and a time stamp. */
-#define configLOGGING_INCLUDE_TIME_AND_TASK_NAME    0
-
-/*
- * With retarget support enabled, printf gets redirected to the UART
- * that connects via USB to the developers machine.
- */
-//#define configPRINT_STRING( X ) fputs((X), stdout)
-#define configPRINT_STRING( X ) printf( (X) )
-//#define configPRINT_STRING( X ) myUARTprint((X))
-
-/* The address of an echo server that will be used by the two demo echo client
- * tasks:
- * http://www.freertos.org/FreeRTOS-Plus/FreeRTOS_Plus_TCP/TCP_Echo_Clients.html,
- * http://www.freertos.org/FreeRTOS-Plus/FreeRTOS_Plus_TCP/UDP_Echo_Clients.html. */
-#define configECHO_SERVER_ADDR0              157
-#define configECHO_SERVER_ADDR1              95
-#define configECHO_SERVER_ADDR2              10
-#define configECHO_SERVER_ADDR3              63
-#define configTCP_ECHO_CLIENT_PORT           9001
-
-/* Default MAC address configuration.  The demo creates a virtual network
- * connection that uses this MAC address by accessing the raw Ethernet/WiFi data
- * to and from a real network connection on the host PC.  See the
- * configNETWORK_INTERFACE_TO_USE definition above for information on how to
- * configure the real network connection to use. */
-#define configMAC_ADDR0                      0xA0
-#define configMAC_ADDR1                      0xC9
-#define configMAC_ADDR2                      0xA0
-#define configMAC_ADDR3                      0x46
-#define configMAC_ADDR4                      0xEA
-#define configMAC_ADDR5                      0x74
-
-/* Default IP address configuration.  Used in ipconfigUSE_DHCP is set to 0, or
- * ipconfigUSE_DHCP is set to 1 but a DNS server cannot be contacted. */
-#define configIP_ADDR0                       192
-#define configIP_ADDR1                       168
-#define configIP_ADDR2                       1
-#define configIP_ADDR3                       4
-
-/* Default gateway IP address configuration.  Used in ipconfigUSE_DHCP is set to
- * 0, or ipconfigUSE_DHCP is set to 1 but a DNS server cannot be contacted. */
-#define configGATEWAY_ADDR0                  192
-#define configGATEWAY_ADDR1                  168
-#define configGATEWAY_ADDR2                  1
-#define configGATEWAY_ADDR3                  1
-
-/* Default DNS server configuration.  OpenDNS addresses are 208.67.222.222 and
- * 208.67.220.220.  Used in ipconfigUSE_DHCP is set to 0, or ipconfigUSE_DHCP is
- * set to 1 but a DNS server cannot be contacted.*/
-#define configDNS_SERVER_ADDR0               208
-#define configDNS_SERVER_ADDR1               67
-#define configDNS_SERVER_ADDR2               222
-#define configDNS_SERVER_ADDR3               222
-
-/* Default netmask configuration.  Used in ipconfigUSE_DHCP is set to 0, or
- * ipconfigUSE_DHCP is set to 1 but a DNS server cannot be contacted. */
-#define configNET_MASK0                      255
-#define configNET_MASK1                      255
-#define configNET_MASK2                      255
-#define configNET_MASK3                      0
-
-/* The UDP port to which print messages are sent. */
-#define configPRINT_PORT                     ( 15000 )
 
 #define configUSE_DAEMON_TASK_STARTUP_HOOK          0
 #define configUSE_PREEMPTION                        1
@@ -254,10 +168,10 @@ standard names. */
 
 /* Enable low power tickless functionality. The RTOS abstraction library
  * provides the compatible implementation of the vApplicationSleep hook:
- * https://github.com/cypresssemiconductorco/abstraction-rtos#freertos
+ * https://github.com/Infineon/abstraction-rtos#freertos
  * The Low Power Assistant library provides additional portable configuration layer
  * for low-power features supported by the PSoC 6 devices:
- * https://github.com/cypresssemiconductorco/lpa
+ * https://github.com/Infineon/lpa
  */
 extern void vApplicationSleep( uint32_t xExpectedIdleTime );
 #define portSUPPRESS_TICKS_AND_SLEEP( xIdleTime ) vApplicationSleep( xIdleTime )

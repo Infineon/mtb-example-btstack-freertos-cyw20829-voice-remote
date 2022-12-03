@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -44,7 +44,9 @@
  ******************************************************************************/
 #ifndef __APP_BT_HID_BSA_H__
 #define __APP_BT_HID_BSA_H__
-#include "app_bt_hid.h"
+
+#include "FreeRTOS.h"
+#include "timers.h"
 
 /*******************************************************************************
  *                              CONSTANTS

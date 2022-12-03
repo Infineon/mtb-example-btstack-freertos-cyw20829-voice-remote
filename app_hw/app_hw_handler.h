@@ -5,7 +5,7 @@
 *              necessary for developing the HAL applications
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,17 +45,25 @@
  *                              INCLUDES
  ******************************************************************************/
 
-#include "app_hw_gpio.h"
-#include "app_bt_bonding.h"
-#include "app_hw_keyscan.h"
 #ifdef STACK_INSIDE_FREE_RTOS
 #include "cybt_platform_config.h"
 #include "cybt_platform_trace.h"
 #endif
 #include "wiced_bt_trace.h"
+
+/*******************************************************************************
+*                           Macro Definitions
+*******************************************************************************/
+#ifdef NO_LOGGING
+#define printf(fmt, ...)     (void)0
+#endif
+
+
+
 /*******************************************************************************
  *                              CONSTANTS
  ******************************************************************************/
+
 
 /*******************************************************************************
  *                              Global Variables

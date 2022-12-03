@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -41,8 +41,10 @@
 #include "cy_pdl.h"
 #include "cyhal.h"
 #include "cybsp.h"
+#include "cy_adcmic.h"
 #include "audio.h"
 #include "app_hw_batmon.h"
+#include "app_hw_handler.h"
 
 /*******************************************************************************
 *        Macro Definitions
@@ -67,22 +69,34 @@ static volatile int adc_dma_buf_cnt = 0;
 /* Debug Variables */
 static uint32_t adc_dma_dbg_intr_cnt;
 static uint32_t adc_overflow_dbg_cnt;
+static uint32_t pcm_buff_overflow_dbg_cnt;
 
 /* Fifo Data Trigger Clear */
 int trigger_clr = CY_ADCMIC_TRIG_DATA;
 
+/* ADC DMA Descriptor 0 */
+cy_stc_dma_descriptor_t CYBSP_DMA_ADC_Descriptor_0 =
+{
+    .ctl = 0UL,
+    .src = 0UL,
+    .dst = 0UL,
+    .xCtl = 0UL,
+    .yCtl = 0UL,
+    .nextPtr = 0UL,
+};
+
 /* ADC DMA Descriptor 0 configuration */
-const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_Descriptor_0_config = 
+const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_Descriptor_0_config =
 {
     .retrigger = CY_DMA_RETRIG_16CYC,
-    .interruptType = CY_DMA_DESCR,
+    .interruptType = CY_DMA_X_LOOP,
     .triggerOutType = CY_DMA_1ELEMENT,
     .channelState = CY_DMA_CHANNEL_ENABLED,
     .triggerInType = CY_DMA_1ELEMENT,
     .dataSize = CY_DMA_WORD,
     .srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
     .dstTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-    .descriptorType = CY_DMA_1D_TRANSFER,
+    .descriptorType = CY_DMA_2D_TRANSFER,
     .srcAddress = NULL,
     .dstAddress = NULL,
     .srcXincrement = 0,
@@ -90,92 +104,12 @@ const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_Descriptor_0_config =
     .xCount = AUDIO_FRAME_SIZE/2,
     .srcYincrement = 0,
     .dstYincrement =  AUDIO_FRAME_SIZE/2,
-    .yCount = 1,
-    .nextDescriptor = NULL,
-};
-
-/* ADC DMA Descriptor 1 configuration */
-const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_Descriptor_1_config = 
-{
-    .retrigger = CY_DMA_RETRIG_16CYC,
-    .interruptType = CY_DMA_DESCR,
-    .triggerOutType = CY_DMA_1ELEMENT,
-    .channelState = CY_DMA_CHANNEL_ENABLED,
-    .triggerInType = CY_DMA_1ELEMENT,
-    .dataSize = CY_DMA_WORD,
-    .srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-    .dstTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-    .descriptorType = CY_DMA_1D_TRANSFER,
-    .srcAddress = NULL,
-    .dstAddress = NULL,
-    .srcXincrement = 0,
-    .dstXincrement = 1,
-    .xCount =  AUDIO_FRAME_SIZE/2,
-    .srcYincrement = 0,
-    .dstYincrement =  AUDIO_FRAME_SIZE/2,
-    .yCount = 1,
-    .nextDescriptor = NULL,
-};
-
-/* ADC DMA Descriptor 2 configuration */
-const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_Descriptor_2_config = 
-{
-    .retrigger = CY_DMA_RETRIG_16CYC,
-    .interruptType = CY_DMA_1ELEMENT,
-    .triggerOutType = CY_DMA_1ELEMENT,
-    .channelState = CY_DMA_CHANNEL_ENABLED,
-    .triggerInType = CY_DMA_1ELEMENT,
-    .dataSize = CY_DMA_WORD,
-    .srcTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-    .dstTransferSize = CY_DMA_TRANSFER_SIZE_WORD,
-    .descriptorType = CY_DMA_1D_TRANSFER,
-    .srcAddress = NULL,
-    .dstAddress = NULL,
-    .srcXincrement = 0,
-    .dstXincrement = 1,
-    .xCount =  AUDIO_FRAME_SIZE/2,
-    .srcYincrement = 0,
-    .dstYincrement =  AUDIO_FRAME_SIZE/2,
-    .yCount = 1,
-    .nextDescriptor = NULL,
-};
-
-/* ADC DMA Descriptor 0 */
-cy_stc_dma_descriptor_t CYBSP_DMA_ADC_Descriptor_0 = 
-{
-    .ctl = 0UL,
-    .src = 0UL,
-    .dst = 0UL,
-    .xCtl = 0UL,
-    .yCtl = 0UL,
-    .nextPtr = 0UL,
-};
-
-/* ADC DMA Descriptor 1 */
-cy_stc_dma_descriptor_t CYBSP_DMA_ADC_Descriptor_1 = 
-{
-    .ctl = 0UL,
-    .src = 0UL,
-    .dst = 0UL,
-    .xCtl = 0UL,
-    .yCtl = 0UL,
-    .nextPtr = 0UL,
-};
-
-/* ADC DMA Descriptor 2 */
-cy_stc_dma_descriptor_t CYBSP_DMA_ADC_Descriptor_2 = 
-{
-
-    .ctl = 0UL,
-    .src = 0UL,
-    .dst = 0UL,
-    .xCtl = 0UL,
-    .yCtl = 0UL,
-    .nextPtr = 0UL,
+    .yCount = 2,
+    .nextDescriptor = &CYBSP_DMA_ADC_Descriptor_0,
 };
 
 /* ADC DMA Channel configuration */
-const cy_stc_dma_channel_config_t CYBSP_DMA_ADC_channelConfig = 
+const cy_stc_dma_channel_config_t CYBSP_DMA_ADC_channelConfig =
 {
     .descriptor = &CYBSP_DMA_ADC_Descriptor_0,
     .preemptable = false,
@@ -219,7 +153,7 @@ const cy_stc_dma_descriptor_config_t CYBSP_DMA_ADC_TRG_Descriptor_0_config =
 };
 
 /* ADC Trigger DMA Channel configuration */
-const cy_stc_dma_channel_config_t CYBSP_DMA_ADC_TRG_channelConfig = 
+const cy_stc_dma_channel_config_t CYBSP_DMA_ADC_TRG_channelConfig =
 {
     .descriptor = &CYBSP_DMA_ADC_TRG_Descriptor_0,
     .preemptable = false,
@@ -228,66 +162,24 @@ const cy_stc_dma_channel_config_t CYBSP_DMA_ADC_TRG_channelConfig =
     .bufferable = false,
 };
 
-/* ADC Analog Mic path configuration */
-cy_stc_adcmic_audio_analog_path_config_t adcmic_analog_mic_config =
-{
-    .micBias = CY_ADCMIC_BIAS_1_14_REF,
-    .micBiasLz = false,
-    .micPd=false,
-    .micClamp=false,
-    .pgaGain = CY_ADCMIC_PGA_GAIN_20, /* 20X */
-    .pgaInCm = CY_ADCMIC_INCM_0_4,
-    .pgaOutCm = CY_ADCMIC_OUTCM_0_6
-};
-
-/* ADC Analog Mic fifo configuration */
-cy_stc_adcmic_fifo_config_t adcmic_fifo_config =
-{
-    .full = 40,
-    .empty = 10
-};
-
-/* ADC Analog Mic fifo trigger configuration */
-cy_stc_adcmic_timer_trigger_config_t adcmic_fifo_trigger_config =
-{
-    .timerTrigger = false,
-    .fifoTrigger = true,
-    .period = 64000UL,
-    .input = CY_ADCMIC_TIMER_COUNT_INPUT_CLK_SYS
-};
-
-/* ADC Analog Mic configuration */
-cy_stc_adcmic_config_t adcmic_config =
-{
-    .clockDiv=2,
-    .source = CY_ADCMIC_MIC,
-#ifdef CONFIG_ADPCM_CODEC
-    .sampleRate = CY_ADCMIC_8KSPS,
-#else
-    .sampleRate = CY_ADCMIC_16KSPS,
-#endif
-    .anaConfig = &adcmic_analog_mic_config,
-    .digConfig = NULL,
-    .dcConfig = NULL,
-    .biQuadConfig = NULL,
-    .fifoConfig = &adcmic_fifo_config,
-    .tmrTrgConfig = &adcmic_fifo_trigger_config
-    };
-
 /******************************************************************************
  *                          Function Definitions
  ******************************************************************************/
 
-/*******************************************************************************
-* Function Name: adc_dma_intr_handler
-********************************************************************************
-* Summary:
-*  Analog mic DMA ISR handler. An audio frame(AUDIO_FRAME_SIZE samples) is received
-*  on this interrupt.Sends a message to encoder queue to encode the current pcm
-*  buffer (audio frame received) and sets up the DMA to copy next frame from
-*  Analog mic to free pcm buffer.
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * adc_dma_intr_handler
+ *
+ * @brief  Analog mic DMA ISR handler. An audio frame(AUDIO_FRAME_SIZE samples) is received
+ *         on this interrupt.Sends a message to encoder queue to encode the current pcm
+ *         buffer (audio frame received) and sets up the DMA to copy next frame from
+ *         Analog mic to free pcm buffer.
+ *
+ * @param void
+ *
+ * @return void
+ */
+CY_SECTION_RAMFUNC_BEGIN
 static void adc_dma_intr_handler(void)
 {
     uint8_t idx;
@@ -295,14 +187,16 @@ static void adc_dma_intr_handler(void)
     Cy_DMA_Channel_ClearInterrupt(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL);
     NVIC_ClearPendingIRQ(ADC_DMA_IRQ_cfg.intrSrc);
 
+    if(Cy_ADCMic_GetFifoStatus(adcmic_0_HW) & CY_ADCMIC_FIFO_OVERFLOW)
+    {
+        adc_overflow_dbg_cnt++;
+    }
+
     Cy_ADCMic_ClearTrigger(adcmic_0_HW, CY_ADCMIC_TRIG_DATA);
-    /* Check if the next buffer is free, setup DMA for Junk buffer if not free */
+
     if(pcm_buff_state[adc_dma_buf_cnt])
     {
-        Cy_DMA_Channel_SetDescriptor(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL, &CYBSP_DMA_ADC_Descriptor_2);
-        Cy_DMA_Channel_Enable(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL);
-        adc_overflow_dbg_cnt++;
-        return;
+        pcm_buff_overflow_dbg_cnt++;
     }
 
     idx = adc_dma_buf_cnt;
@@ -314,31 +208,22 @@ static void adc_dma_intr_handler(void)
 
     send_msg_to_audio_q(idx);
 
-    /* Sets up the Descriptor for next free buffer and enable the DMA Channel*/
-    if(idx)
-    {
-        Cy_DMA_Channel_SetDescriptor(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL, &CYBSP_DMA_ADC_Descriptor_0);
-    }
-    else
-    {
-        Cy_DMA_Channel_SetDescriptor(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL, &CYBSP_DMA_ADC_Descriptor_1);
-    }
-   Cy_DMA_Channel_Enable(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL);
-   Cy_DMA_Channel_Enable(CYBSP_DMA_ADC_TRG_HW, CYBSP_DMA_ADC_TRG_CHANNEL);
-
-    /* ADC mic dma interrupt count for debug */
+     /* ADC mic dma interrupt count for debug */
     adc_dma_dbg_intr_cnt++;
 }
+CY_SECTION_RAMFUNC_END
 
-
-/*******************************************************************************
-* Function Name: adcmic_dma_trg_configure
-********************************************************************************
-* Summary:
-*  It setups dma descriptor for ADC Data trigger, This is setup to Clear the
-*  trigger on every DMA element transfer for Analog Mic
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * adcmic_dma_trg_configure
+ *
+ * @brief  It setups dma descriptor for ADC Data trigger, This is setup to Clear
+ *         the trigger on every DMA element transfer for Analog Mic.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void adcmic_dma_trg_configure(void)
 {
     cy_en_dma_status_t status;
@@ -364,13 +249,16 @@ static void adcmic_dma_trg_configure(void)
     Cy_DMA_Enable(CYBSP_DMA_ADC_TRG_HW);
 }
 
-/*******************************************************************************
-* Function Name: adcmic_dma_configure
-********************************************************************************
-* Summary:
-*  It setups dma descriptor for ping pong buffer and initializes PDM DMA channel
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * adcmic_dma_configure
+ *
+ * @brief  It setups dma descriptor for ping pong buffer and initializes PDM
+ *         DMA channel.
+ * @param void
+ *
+ * @return void
+ */
 static void adcmic_dma_configure(void)
 {
     cy_en_dma_status_t status;
@@ -384,32 +272,10 @@ static void adcmic_dma_configure(void)
 
     /*Sets the Various parameters of Descriptor Like Y loop count, Src and Dest Addr */
     Cy_DMA_Descriptor_SetXloopDataCount(&CYBSP_DMA_ADC_Descriptor_0, AUDIO_FRAME_SIZE/2);
+    Cy_DMA_Descriptor_SetYloopDstIncrement(&CYBSP_DMA_ADC_Descriptor_0, AUDIO_FRAME_SIZE/2);
+    Cy_DMA_Descriptor_SetYloopDataCount(&CYBSP_DMA_ADC_Descriptor_0, 2);
     Cy_DMA_Descriptor_SetSrcAddress(&CYBSP_DMA_ADC_Descriptor_0, (void *) (CY_ADCMIC_FIFO_DATA_REG_PTR(adcmic_0_HW)));
     Cy_DMA_Descriptor_SetDstAddress(&CYBSP_DMA_ADC_Descriptor_0, (void *) pcm_buff[0]);
-
-    /* Initializes the DMA descriptor for 2nd buffer*/
-    status = Cy_DMA_Descriptor_Init(&CYBSP_DMA_ADC_Descriptor_1, &CYBSP_DMA_ADC_Descriptor_1_config);
-    if (CY_DMA_SUCCESS != status)
-    {
-        printf("DMA descriptor for 2nd buffer Initialization has failed! \r\n");
-        CY_ASSERT(0);
-    }
-
-    Cy_DMA_Descriptor_SetXloopDataCount(&CYBSP_DMA_ADC_Descriptor_1, AUDIO_FRAME_SIZE/2);
-    Cy_DMA_Descriptor_SetSrcAddress(&CYBSP_DMA_ADC_Descriptor_1, (void *) (CY_ADCMIC_FIFO_DATA_REG_PTR(adcmic_0_HW)));
-    Cy_DMA_Descriptor_SetDstAddress(&CYBSP_DMA_ADC_Descriptor_1, (void *) pcm_buff[1]);
-
-    /* Initializes the DMA descriptor for Garbage buffer*/
-    status = Cy_DMA_Descriptor_Init(&CYBSP_DMA_ADC_Descriptor_2, &CYBSP_DMA_ADC_Descriptor_2_config);
-    if (CY_DMA_SUCCESS != status)
-    {
-        printf("DMA descriptor for garbage buffer Initialization has failed! \r\n");
-        CY_ASSERT(0);
-    }
-
-    Cy_DMA_Descriptor_SetXloopDataCount(&CYBSP_DMA_ADC_Descriptor_2, AUDIO_FRAME_SIZE/4);
-    Cy_DMA_Descriptor_SetSrcAddress(&CYBSP_DMA_ADC_Descriptor_2, (void *) (CY_ADCMIC_FIFO_DATA_REG_PTR(adcmic_0_HW)));
-    Cy_DMA_Descriptor_SetDstAddress(&CYBSP_DMA_ADC_Descriptor_2, (void *) pdm_pcm_garbage_buff);
 
     /* Sets up descriptor and other parameters for DMA channel */
     status = Cy_DMA_Channel_Init(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL, &CYBSP_DMA_ADC_channelConfig);
@@ -419,25 +285,18 @@ static void adcmic_dma_configure(void)
         CY_ASSERT(0);
     }
     Cy_DMA_Enable(CYBSP_DMA_ADC_HW);
-
-    /* Register the interrupt handler of PDM DMA Done Irq */
-    if(CY_SYSINT_SUCCESS != Cy_SysInt_Init(&ADC_DMA_IRQ_cfg, &adc_dma_intr_handler))
-    {
-        printf("PDM DMA IRQ Initialization has failed! \r\n");
-        CY_ASSERT(0);
-    }
-
-    NVIC_ClearPendingIRQ(ADC_DMA_IRQ_cfg.intrSrc);
-    NVIC_EnableIRQ(ADC_DMA_IRQ_cfg.intrSrc);
 }
 
-/*******************************************************************************
-* Function Name: analog_mic_capture_start
-********************************************************************************
-* Summary:
-*  Start/Stops capture audio data from Analog mic
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * analog_mic_capture_start
+ *
+ * @brief  Start/Stops capture audio data from Analog mic.
+ *
+ * @param en
+ *
+ * @return void
+ */
  void analog_mic_capture_start(uint8_t en)
 {
     /* Starts ADC DMA to capture audio data and unmask irq for dma channel */
@@ -446,11 +305,19 @@ static void adcmic_dma_configure(void)
         adc_dma_buf_cnt = 0;
         /* Disable DC monitoring and Init the ADCMic for Analog Mic */
         adc_dc_monitoring_enable(0);
-        if (CY_ADCMIC_SUCCESS != Cy_ADCMic_Init(adcmic_0_HW, &adcmic_config))
+
+        adcmic_dma_configure();
+
+        /* DMA channel for ADC Trigger is configured  */
+        adcmic_dma_trg_configure();
+
+        if (CY_ADCMIC_SUCCESS != Cy_ADCMic_Init(adcmic_0_HW, &adcmic_0_config, CY_ADCMIC_MIC))
         {
             CY_ASSERT(0);
         }
-
+#ifdef CONFIG_ADPCM_CODEC
+        Cy_ADCMic_SetSampleRate(adcmic_0_HW, CY_ADCMIC_8KSPS);
+#endif
         /* Set ADC BIQUAD filter settings to default */
         Cy_ADCMic_BiquadBypass(adcmic_0_HW, 0);
 
@@ -458,9 +325,7 @@ static void adcmic_dma_configure(void)
 
         /* Clear the ADC DATA Trigger  */
         Cy_ADCMic_ClearTrigger(adcmic_0_HW, CY_ADCMIC_TRIG_DATA);
-        Cy_ADCMic_WakeUpMic(adcmic_0_HW);
         Cy_ADCMic_Enable (adcmic_0_HW);
-        Cy_ADCMic_StartConvert(adcmic_0_HW);
         Cy_DMA_Channel_Enable(CYBSP_DMA_ADC_HW, CYBSP_DMA_ADC_CHANNEL);
         Cy_DMA_Channel_Enable(CYBSP_DMA_ADC_TRG_HW, CYBSP_DMA_ADC_TRG_CHANNEL);
 
@@ -474,8 +339,7 @@ static void adcmic_dma_configure(void)
 
         /* Clear the ADC DATA Trigger  */
         Cy_ADCMic_ClearTrigger(adcmic_0_HW, CY_ADCMIC_TRIG_DATA);
-        Cy_ADCMic_SleepMic(adcmic_0_HW);
-        Cy_ADCMic_StopConvert (adcmic_0_HW);
+        adcmic_0_HW->ADCMIC_FIFO_CTRL &= 0x3FFF;
         Cy_ADCMic_Disable(adcmic_0_HW);
 
         /* Enable DC monitoring after Streaming is finished */
@@ -483,13 +347,16 @@ static void adcmic_dma_configure(void)
     }
 }
 
-/*******************************************************************************
-* Function Name: analog_mic_interface_init
-********************************************************************************
-* Summary:
-*  Initializes the PDM/PCM block
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * analog_mic_interface_init
+ *
+ * @brief  Initializes the PDM/PCM block
+ *
+ * @param void
+ *
+ * @return void
+ */
 void analog_mic_interface_init(void)
 {
     /*TriggerMux Connections for ADC Mic DMA and ADC Trgigger DMA */
@@ -501,6 +368,16 @@ void analog_mic_interface_init(void)
 
     /* DMA channel for ADC Trigger is configured  */
     adcmic_dma_trg_configure();
+
+    /* Register the interrupt handler of PDM DMA Done Irq */
+    if(CY_SYSINT_SUCCESS != Cy_SysInt_Init(&ADC_DMA_IRQ_cfg, &adc_dma_intr_handler))
+    {
+        printf("Analog MIC DMA IRQ Initialization has failed! \r\n");
+        CY_ASSERT(0);
+    }
+
+    NVIC_ClearPendingIRQ(ADC_DMA_IRQ_cfg.intrSrc);
+    NVIC_EnableIRQ(ADC_DMA_IRQ_cfg.intrSrc);
 }
 
 

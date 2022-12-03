@@ -2,10 +2,10 @@
 * File Name: app_hw_gpio.c
 *
 * Description: This file consists of the function prototypes that are
-*              necessary for developing LED and push button use cases.
+*              necessary for developing LED use cases.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -44,31 +44,40 @@
 /*******************************************************************************
  *                              INCLUDES
  ******************************************************************************/
-#include "GeneratedSource/cycfg_pins.h"
-#include "cybsp_types.h"
 #include "cyhal_gpio.h"
+#include "cybsp.h"
 
 /*******************************************************************************
  *                              CONSTANTS
  ******************************************************************************/
 /* LED pin assignment for connection */
-#define STATUS_LED                   CYBSP_USER_LED1
+#define RED_LED                   CYBSP_USER_LED1
+#define GREEN_LED                 CYBSP_USER_LED2
+
 
 /*******************************************************************************
  *                              Global Variables
  ******************************************************************************/
+/* Different coloured LEDs present on voice remote */
+typedef enum
+{
+    RED = 0,
+    GREEN
+}t_led_colour;
 
 /*******************************************************************************
  *                              FUNCTION DEFINITIONS
  ******************************************************************************/
 
 /*                      Status LED APIs                                       */
-void app_status_led_init(void);
+void app_status_led_init(cyhal_gpio_t led_pin);
 
-void app_status_led_on(void);
+void app_status_led_on(cyhal_gpio_t led_pin);
 
-void app_status_led_off(void);
+void app_status_led_off(cyhal_gpio_t led_pin);
 
-void app_status_led_start_blinking(void);
+void app_status_led_blinky_on(t_led_colour colour);
+
+void app_status_led_blinky_off(t_led_colour colour);
 
 #endif // __APP_HW_GPIO_H_

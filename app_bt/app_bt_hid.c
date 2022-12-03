@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -48,6 +48,14 @@
 #include "app_bt_advert.h"
 #include "app_bt_bonding.h"
 #include "app_bt_gatt_handler.h"
+#include "app_hw_handler.h"
+
+#ifdef ATV_ADPCM
+#include "app_bt_hid_atv.h"
+#endif
+#ifdef BSA_OPUS
+#include "app_bt_hid_bsa.h"
+#endif
 
 /*******************************************************************************
  *                              CONSTANTS
@@ -55,9 +63,20 @@
 /* 'Home' Key press time for Pairing Mode */
 #define HOME_KEY_TIMEOUT_IN_MS                  (5000)
 
+/* Task names for Bluetooth LE Voice Remote */
+#define BLE_TASK_NAME                           "BLE Task"
+
+/* BLE Stack size for Bluetooth LE Voice Remote */
+#define BLE_TASK_STACK_SIZE                     (512u)
+
+/* Task Priority of  Bluetooth LE Voice Remote */
+#define BLE_TASK_PRIORITY                       (1)
+
 /*******************************************************************************
  *                              Global Variables
  ******************************************************************************/
+
+TaskHandle_t ble_task_h;
 
 /* Queue for sending KS events and battery reports to Bluetooth LE Task */
 QueueHandle_t   hid_rpt_q;
@@ -78,9 +97,15 @@ static void app_pair_mode_timer_cb(TimerHandle_t cb_params);
 
 
 /**
+ * Function Name:
+ * app_send_audio_data
+ *
+ * Function Description:
  * @brief Wrapper function to send ADPCM or OPUS data depending on the flag
  *
- * @param p_buf
+ * @param p_buf Pointer to audio data
+ *
+ * @return void
  */
 void app_send_audio_data(uint8_t *p_buf)
 {
@@ -94,9 +119,15 @@ void app_send_audio_data(uint8_t *p_buf)
 
 
 /**
+ * Function Name:
+ * app_ble_task
+ *
+ * Function Description:
  * @brief Send Reports through BLE GATT notifications
  *
- * @param pvParameters
+ * @param pvParameters Parameters to RTOS task
+ *
+ * @return void
  */
 void app_ble_task(void* pvParameters)
 {
@@ -165,10 +196,16 @@ void app_ble_task(void* pvParameters)
 
 
 /**
+ * Function Name:
+ * app_keyscan_activity_handler
+ *
+ * Function Description:
  * @brief Send Reports through BLE GATT notifications
  *
  * @param keyCode       The unique keycode generated for each button
  * @param upDownFlag    Key pressed or released flag
+ *
+ * @return void
  *
  */
 static void app_keyscan_activity_handler(uint8_t keyCode, uint8_t upDownFlag)
@@ -240,7 +277,15 @@ static void app_keyscan_activity_handler(uint8_t keyCode, uint8_t upDownFlag)
 
 
 /**
+ * Function Name:
+ * app_pair_mode_timer_create
+ *
+ * Function Description:
  * @brief Timer init for Home Key pairing mode
+ *
+ * @param void
+ *
+ * @return void
  *
  */
 static void app_pair_mode_timer_create(void)
@@ -260,10 +305,16 @@ static void app_pair_mode_timer_create(void)
 }
 
 /**
-* @brief Timer callback to enter pairing mode
-*
-* @param cb_params argument to the callback
-*/
+ * Function Name:
+ * app_pair_mode_timer_cb
+ *
+ * Function Description:
+ * @brief Timer callback to enter pairing mode
+ *
+ * @param cb_params argument to the callback
+ *
+ * @return void
+ */
 static void app_pair_mode_timer_cb(TimerHandle_t cb_params)
 {
    (void)cb_params;
@@ -274,5 +325,32 @@ static void app_pair_mode_timer_cb(TimerHandle_t cb_params)
     app_bt_start_adv_any_host();
     printf("Bond Info removed \r\n");
     current_remote_state = UNPAIRED_ADVERTISING;
+}
 
+/**
+ * Function Name:
+ * ble_task_init
+ *
+ * @brief  This Function creates BLE task.
+ *
+ * @param void
+ *
+ * @return void
+ */
+void ble_task_init(void)
+{
+    /* Initialize Bluetooth LE task or Stack */
+    if( pdPASS != xTaskCreate(app_ble_task,
+                              BLE_TASK_NAME,
+                              BLE_TASK_STACK_SIZE,
+                              NULL,
+                              BLE_TASK_PRIORITY,
+                              &ble_task_h))
+    {
+        /* Task is not created due to insufficient Heap memory.
+         * Use vApplicationMallocFailedHook() callback to trap.
+         * And xPortGetFreeHeapSize() to query unallocated heap memory
+         */
+        printf("Bluetooth LE Task creation failed");
+    }
 }

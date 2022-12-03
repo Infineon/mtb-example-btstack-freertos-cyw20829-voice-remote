@@ -1,11 +1,11 @@
 /*******************************************************************************
-* File Name: app_hw_keyscan.h
+* File Name: app_hw_keyscan.c
 *
 * Description: This file consists of the function defintions that are
 *              necessary for developing Keyscan use cases.
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -41,18 +41,32 @@
 /*******************************************************************************
  *                              INCLUDES
  ******************************************************************************/
+#include "app_hw_handler.h"
+#include "app_hw_serial_flash.h"
 #include "app_hw_keyscan.h"
+#include "app_hw_gpio.h"
+#include "app_bt_hid.h"
+
+/*******************************************************************************
+ *                              Macro Definitions
+ ******************************************************************************/
+#define MAX_NOOF_ROWS                       (3U)
+#define MAX_NOOF_COLUMNS                    (10U)
+/* Keyscan Task Priority of  Bluetooth LE Voice Remote */
+#define KEYSCAN_TASK_PRIORITY               (configMAX_PRIORITIES - 2)
+/* Keyscan Stack size for Bluetooth LE Voice Remote */
+#define KEYSCAN_TASK_STACK_SIZE             (512u)
+/* Keyscan task names for Bluetooth LE Voice Remote */
+#define KEYSCAN_TASK_NAME                   "Keyscan Task"
 
 /*******************************************************************************
  *                              Global Variables
  ******************************************************************************/
-/* Task handle to send Bluetooth LE GATT notifications */
-
+/* Task handle to send Keyscan notifications */
 TaskHandle_t keyscan_task_h;
 
 cy_stc_keyscan_context_t context;
 
-bool events_pending;
 uint32_t g_PORT_SEL0;
 uint32_t g_PORT_SEL1;
 uint32_t g_CFG;
@@ -60,6 +74,7 @@ uint32_t g_OUT;
 cy_stc_syspm_callback_params_t syspm_ks_ds_params;
 uint8_t key_state_cnt;
 uint8_t deepsleep_hold;
+
 
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
@@ -69,7 +84,15 @@ static void app_keyscan_evt_notif_enable(uint32_t keyNotify);
 
 static void send_msg_to_hid_msg_q(uint8_t keyCode, uint8_t upDownFlag);
 
-static void keyscan_intHandler(void);
+static void app_keyscan_intHandler(void);
+
+static app_keyscan_status_t app_keyscan_interrupt_init(void);
+
+static app_keyscan_status_t app_keyscan_handler_init(void);
+
+static int app_configure_keyscan(void);
+
+static void app_key_detected_callback(void);
 
 cy_en_syspm_status_t
 syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
@@ -97,13 +120,69 @@ const cy_stc_sysint_t keyscan_irq_cfg =
     /* .intrPriority */ 7UL
 };
 
+extern uint8_t stack_init_done;
+
 /**
+ * Function Name:
+ * smif_disable
+ *
+ * Function Description:
+ * @brief it disable the the SMIF.
+ *
+ * @return CY_SECTION_RAMFUNC_BEGIN
+ */
+CY_SECTION_RAMFUNC_BEGIN
+void smif_disable()
+{
+    SMIF0->CTL = SMIF0->CTL & ~SMIF_CTL_ENABLED_Msk;
+    g_PORT_SEL0 = HSIOM_PRT2->PORT_SEL0;
+    g_PORT_SEL1 = HSIOM_PRT2->PORT_SEL1;
+    g_CFG = GPIO_PRT2->CFG;
+    g_OUT = GPIO_PRT2->OUT;
+    HSIOM_PRT2->PORT_SEL0 = 0x00;
+    HSIOM_PRT2->PORT_SEL1 = 0x00;
+    GPIO_PRT2->CFG = 0x600006;
+    GPIO_PRT2->OUT = 0x1;
+}
+CY_SECTION_RAMFUNC_END
+
+/**
+ * Function Name:
+ * smif_enable
+ *
+ * Function Description:
+ * @brief it enable the SMIF.
+ *
+ * @return CY_SECTION_RAMFUNC_BEGIN
+ */
+CY_SECTION_RAMFUNC_BEGIN
+void smif_enable()
+{
+    SMIF0->CTL = SMIF0->CTL | SMIF_CTL_ENABLED_Msk;
+    HSIOM_PRT2->PORT_SEL0 = g_PORT_SEL0;
+    HSIOM_PRT2->PORT_SEL1 = g_PORT_SEL1;
+    GPIO_PRT2->CFG = g_CFG;
+    GPIO_PRT2->OUT = g_OUT;
+}
+CY_SECTION_RAMFUNC_END
+
+
+/**
+ * Function Name:
+ * syspm_ks_ds_cb
+ *
+ * Function Description:
  * @brief DeepSleep Callback Function
+ *
+ * @param callbackParams Pointer to cy_stc_syspm_callback_params_t
+ * @param mode cy_en_syspm_callback_mode_t
+ *
+ * @return cy_en_syspm_status_t CY_SYSPM_SUCCESS or CY_SYSPM_FAIL
  */
 CY_SECTION_RAMFUNC_BEGIN
 cy_en_syspm_status_t
-syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
-                              cy_en_syspm_callback_mode_t mode)
+syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
+                cy_en_syspm_callback_mode_t mode)
 {
     cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
     CY_UNUSED_PARAMETER(callbackParams);
@@ -135,20 +214,14 @@ syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
                 Cy_SysClk_MfoEnable(true);
             }
 
-            // Disable SMIF
-            SMIF0->CTL = SMIF0->CTL & ~SMIF_CTL_ENABLED_Msk;
-
-            g_PORT_SEL0 = HSIOM_PRT2->PORT_SEL0;
-            g_PORT_SEL1 = HSIOM_PRT2->PORT_SEL1;
-            g_CFG = GPIO_PRT2->CFG;
-            g_OUT = GPIO_PRT2->OUT;
-
-            HSIOM_PRT2->PORT_SEL0 = 0x00;
-            HSIOM_PRT2->PORT_SEL1 = 0x00;
-
-            GPIO_PRT2->CFG = 0x600006;
-
-            GPIO_PRT2->OUT = 0x1;
+#ifdef FLASH_POWER_DOWN
+            if (stack_init_done)
+            {
+                flash_memory_power_down();
+            }
+#endif
+            //Disable SMIF
+            smif_disable();
             retVal = CY_SYSPM_SUCCESS;
         }
         break;
@@ -157,15 +230,14 @@ syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
         {
 
             //Enable SMIF
-            SMIF0->CTL = SMIF0->CTL | SMIF_CTL_ENABLED_Msk;
+            smif_enable();
+#ifdef FLASH_POWER_DOWN 
 
-            HSIOM_PRT2->PORT_SEL0 = g_PORT_SEL0;
-            HSIOM_PRT2->PORT_SEL1 = g_PORT_SEL1;
-
-            GPIO_PRT2->CFG = g_CFG;
-
-            GPIO_PRT2->OUT = g_OUT;
-
+            if(stack_init_done)
+            {
+                flash_memory_power_up();
+            }
+#endif
             retVal = CY_SYSPM_SUCCESS;
         }
         break;
@@ -187,22 +259,22 @@ syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
 CY_SECTION_RAMFUNC_END
 
 
-/*******************************************************************************
+/**
  * Function Name: keyscan_task
- *******************************************************************************
- * Summary:
- *  Task that prints the keycode, row and columns of the keyscan activity
  *
- * Parameters:
- *  void *args : Task parameter defined during task creation (unused)
+ * Function Description:
+ * @brief
+ * Task that prints the keycode, row and columns of the keyscan activity
  *
- * Return:
- *  void
+ * @param void *args - Task parameter defined during task creation (unused)
  *
- *******************************************************************************/
+ * @return void
+ *
+ */
 void keyscan_task(void *args)
 {
 
+    bool events_pending;
     cy_en_ks_status_t app_ks_result;
     cy_stc_key_event kevent;
     cy_en_ks_status_t status;
@@ -263,6 +335,7 @@ void keyscan_task(void *args)
                 }
                 /* Keycode is calculated as ((no of rows * column num) + row num) */
                 printf("Keycode detected is :%u \r\n", keyCode);
+
                 // printf("Row %u Column %u\r\n",
                 //         (keyCode % keyscan_0_config.noofRows),
                 //         (keyCode / keyscan_0_config.noofRows));
@@ -281,11 +354,18 @@ void keyscan_task(void *args)
 
 
 /**
- * @brief This is an interrupt callback which will be executed based on the
- * Keyscan interrupt triggers.
+ * Function Name:
+ * app_keyscan_intHandler
  *
+ * Function Description:
+ * @brief This is an interrupt callback which will be executed based on the
+ *        Keyscan interrupt triggers.
+ *
+ * @param void
+ *
+ * @return void
  */
-static void keyscan_intHandler(void)
+static void app_keyscan_intHandler(void)
 {
     cy_en_ks_status_t status;
     uint32_t int_status;
@@ -309,28 +389,37 @@ static void keyscan_intHandler(void)
 
 
 /**
+ * Function Name:
+ * app_key_detected_callback
+ *
+ * Function Description:
  * @brief This is an interrupt callback which will be executed based on the
  * Keyscan interrupt triggers.
  *
+ * @param void
+ *
+ * @return void
  */
-void key_detected_callback(void)
+static void app_key_detected_callback(void)
 {
     // Send Event Notification to Keyscan task
      app_keyscan_evt_notif_enable(0);
 }
 
-
 /**
- *****************************************************************************
- **  app_configure_keyscan
- **  Configures the keyscan ip with
- **  3 rows and 10 columns
- **  macroDownDebCnt = 6u,
- **  macroUpDebCnt = 4u,
- **  microDebCnt = 1u,
- **
- *****************************************************************************/
-int app_configure_keyscan(void)
+ * Function Name: app_configure_keyscan
+ *
+ * @brief Configures the Keyscan Hardware Block with
+ * 3 rows and 10 columns
+ * macroDownDebCnt = 6u,
+ * macroUpDebCnt = 4u,
+ * microDebCnt = 1u,
+ *
+ * @param void
+ *
+ * @return int app_keyscan_status_t
+ */
+static int app_configure_keyscan(void)
 {
     cy_en_ks_status_t ks_status;
     ks_status = Cy_Keyscan_Init(MXKEYSCAN, &keyscan_0_config, &context);
@@ -340,7 +429,7 @@ int app_configure_keyscan(void)
         return KEYSCAN_FAILURE;
     }
 
-    ks_status = Cy_Keyscan_Register_Callback(key_detected_callback, &context);
+    ks_status = Cy_Keyscan_Register_Callback(app_key_detected_callback, &context);
     if(ks_status != CY_KEYSCAN_SUCCESS)
     {
         printf("Keyscan register event notification failed. \r\n");
@@ -357,30 +446,52 @@ int app_configure_keyscan(void)
     return KEYSCAN_SUCCESS;
 }
 
-app_keyscan_status_t app_keyscan_handler_init(void)
+/**
+ * Function Name:
+ * app_keyscan_handler_init
+ *
+ * Function Description:
+ * @brief Configures Keymatrix size and debounce filters
+ *
+ * @param void
+ *
+ * @return app_keyscan_status_t KEYSCAN_FAILURE or KEYSCAN_SUCCESS
+ */
+static app_keyscan_status_t app_keyscan_handler_init(void)
 {
 
     /* Configure Keymatrix size and debounce filters */
     if ( KEYSCAN_SUCCESS != app_configure_keyscan() )
     {
         printf("Keyscan Config failed \r\n");
+        return KEYSCAN_FAILURE;
     }
     else
     {
         printf("Keyscan Config is successful \r\n");
+        return KEYSCAN_SUCCESS;
     }
 
-    return KEYSCAN_SUCCESS;
 }
 
-
-app_keyscan_status_t app_keyscan_interrupt_init(void)
+/**
+ * Function Name:
+ * app_keyscan_interrupt_init
+ *
+ * Function Description:
+ * @brief Function to configure Keyscan interrupt
+ *
+ * @param void
+ *
+ * @return app_keyscan_status_t KEYSCAN_FAILURE or KEYSCAN_SUCCESS
+ */
+static app_keyscan_status_t app_keyscan_interrupt_init(void)
 {
 
     cy_en_sysint_status_t sysStatus;
 
     /* Hook the interrupt service routine and enable the interrupt */
-    sysStatus = Cy_SysInt_Init(&keyscan_irq_cfg, keyscan_intHandler);
+    sysStatus = Cy_SysInt_Init(&keyscan_irq_cfg, app_keyscan_intHandler);
     if(CY_SYSINT_SUCCESS != sysStatus)
     {
         return KEYSCAN_FAILURE;
@@ -393,27 +504,42 @@ app_keyscan_status_t app_keyscan_interrupt_init(void)
 }
 
 /**
+ * Function Name:
+ * app_keyscan_evt_notif_enable
+ *
+ * Function Description:
  * @brief This function is invoked when a Keyscan button interrupt is triggered
  *
+ * @param keyNotify uint32_t
+ *
+ * @return void
  */
 static void app_keyscan_evt_notif_enable(uint32_t keyNotify)
 {
     BaseType_t xHigherPriorityTaskWoken;
 
-    if (pdTRUE == xTaskNotifyFromISR(
-                    keyscan_task_h,         // Handle of the task being notified
+    if (pdTRUE != xTaskNotifyFromISR(
+                    keyscan_task_h,              // Handle of the task being notified
                     keyNotify,                   // Used to update the notification value of the target task
                     eSetValueWithOverwrite ,     // The Target task receives the event and is unconditionally set to ulvalue.
-                    &xHigherPriorityTaskWoken ))  // This value will be set to pdTRUE when sending)
+                    &xHigherPriorityTaskWoken )) // This value will be set to pdTRUE when sending)
     {
-        // printf("key evt Notified to task\r\n");
+        printf("Key evt not Notified to task\r\n");
     }
     portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
 }
 
 /**
+ * Function Name:
+ * send_msg_to_hid_msg_q
+ *
+ * Function Description:
  * @brief This function is invoked when a Keyscan button interrupt is triggered
  *
+ * @param keyCode KeyCode from Keyscan driver
+ * @param upDownFlag KEY_PRESSED or KEY_RELEASED
+ *
+ * @return void
  */
 static void send_msg_to_hid_msg_q(uint8_t keyCode, uint8_t upDownFlag)
 {
@@ -421,9 +547,48 @@ static void send_msg_to_hid_msg_q(uint8_t keyCode, uint8_t upDownFlag)
     ks_msg.msg_type = KS_MSG_TYPE;
     ks_msg.data.ks.keycode = keyCode;
     ks_msg.data.ks.upDownFlag = upDownFlag;
+#if defined (GREEN_LED_ENABLE)
+    if(upDownFlag == KEY_PRESSED)
+    {
+        app_status_led_on(GREEN_LED);
+    }
+    else
+    {
+        app_status_led_off(GREEN_LED);
+    }
+#endif
     if( pdPASS != xQueueSend( hid_rpt_q, &ks_msg, TICKS_TO_WAIT) )
     {
         printf("Failed to send msg from KS to HID rpt Queue\r\n");
         CY_ASSERT(0);
     }
 }
+
+/**
+ * Function Name:
+ * button_task_init
+ *
+ * @brief  This Function creates Button task.
+ *
+ * @param void
+ *
+ * @return void
+ */
+void keyscan_task_init(void)
+{
+    /* Initialize the Keyscan task */
+    if( pdPASS != xTaskCreate(keyscan_task,
+                              KEYSCAN_TASK_NAME,
+                              KEYSCAN_TASK_STACK_SIZE,
+                              NULL,                     /* (void*) &xBatmonTaskParam */
+                              KEYSCAN_TASK_PRIORITY,
+                              &keyscan_task_h))
+    {
+        /* Task is not created due to insufficient Heap memory.
+         * Use vApplicationMallocFailedHook() callback to trap.
+         * And xPortGetFreeHeapSize() to query unallocated heap memory
+         */
+        printf("Keyscan Task creation failed");
+    }
+}
+

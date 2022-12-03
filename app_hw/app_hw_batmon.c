@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -38,7 +38,7 @@
 * indemnify Cypress against all liability.
 *******************************************************************************/
 /*******************************************************************************
-*        Includes
+*                               Includes
 *******************************************************************************/
 #include "cy_pdl.h"
 #include "cybsp.h"
@@ -51,34 +51,36 @@
 #include "app_hw_batmon.h"
 #include "app_bt_hid.h"
 #include "cyhal_syspm.h"
+#include "app_hw_serial_flash.h"
+#include "app_hw_keyscan.h"
+#include "app_hw_handler.h"
 
 /*******************************************************************************
-*        Macro Definitions
+*                               Macro Definitions
 *******************************************************************************/
 #define NO_OF_DC_SAMPLES                    (8)
 #define BATMON_TIMEOUT_IN_MS                (300000)
 #define BATMON_TASK_STACK_SIZE              (256u)
 #define BATMON_TASK_PRIORITY                (2)
-#define DC_START                            (1)
-#define DC_STOP                             (0)
 #define BATT_LVL_0_MV                       (1800)
 #define BATT_LVL_100_MV                     (3000)
 #define BATT_CAP_MV                         (BATT_LVL_100_MV - BATT_LVL_0_MV)
 #define BATT_MV_1_CAP                       (BATT_CAP_MV/100)   //MV for 1 percent capacity of Battery Level
 
 /*******************************************************************************
-*        Variable Definitions
+*                               Global Variables
 *******************************************************************************/
 uint16_t batmon_samples[NO_OF_DC_SAMPLES];
 uint8_t dc_sample_cnt = 0;
 uint32_t batmon_dc_avg = 0;
+cy_stc_syspm_callback_params_t syspm_batmon_hb_params;
 
 /* Initial State of ADC driver set to IDLE */
 volatile adc_driver_state_t adc_drv_state = ADC_IDLE;
 
-TimerHandle_t batmon_timer_h;
-TaskHandle_t batmon_task_h;
-SemaphoreHandle_t adc_sem_h = NULL;
+static TimerHandle_t batmon_timer_h;
+static TaskHandle_t batmon_task_h;
+static SemaphoreHandle_t adc_sem_h = NULL;
 
 /* ADCMIC interrupt configuration parameters */
 const cy_stc_sysint_t ADCMIC_IRQ_cfg = {
@@ -86,18 +88,40 @@ const cy_stc_sysint_t ADCMIC_IRQ_cfg = {
     .intrPriority = 7
 };
 
+/*******************************************************************************
+ *                              FUNCTION DECLARATIONS
+ ******************************************************************************/
+cy_en_syspm_status_t
+syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
+                              cy_en_syspm_callback_mode_t mode);
+
+cy_stc_syspm_callback_t syspm_batmon_hb_cb_handler =
+{
+    syspm_batmon_hb_cb,
+    CY_SYSPM_HIBERNATE,
+    0u,
+    &syspm_batmon_hb_params,
+    NULL,
+    NULL,
+    255
+};
+
 /******************************************************************************
  *                          Function Definitions
  ******************************************************************************/
 
-/*******************************************************************************
-* Function Name: adc_dc_cap_start
-********************************************************************************
-* Summary:
-*  It enable the ADC DC monitoring.
-*
-*******************************************************************************/
-void adc_dc_cap_start(void)
+/**
+ * Function Name:
+ * adc_dc_cap_start
+ *
+ * Function Description:
+ * @brief It enable the ADC DC monitoring.
+ *
+ * @param void
+ *
+ * @return void
+ */
+static void adc_dc_cap_start(void)
 {
     /* Acquire Semaphore to change the ADC Driver state to DC_MON_ON */
     if(xSemaphoreTake(adc_sem_h, ( TickType_t ) 20 ) == pdTRUE)
@@ -105,20 +129,15 @@ void adc_dc_cap_start(void)
         if(adc_drv_state == ADC_IDLE)
         {
             /* Initialize the ADCMic for for DC monitoring */
-            if (CY_ADCMIC_SUCCESS != Cy_ADCMic_Init(adcmic_0_HW, &adcmic_0_config))
+            if (CY_ADCMIC_SUCCESS != Cy_ADCMic_Init(adcmic_0_HW, &adcmic_0_config,CY_ADCMIC_DC))
             {
                CY_ASSERT(0);
             }
 
-            if (CY_ADCMIC_SUCCESS != Cy_ADCMic_SetDcConvTime(adcmic_0_HW, CY_ADCMIC_DC_CONV_TIME_15_US))
-            {
-               CY_ASSERT(0);
-            }
             Cy_ADCMic_SetInterruptMask(adcmic_0_HW, CY_ADCMIC_INTR_DC);
             Cy_ADCMic_ClearInterrupt(adcmic_0_HW,CY_ADCMIC_INTR);
             Cy_ADCMic_Enable(adcmic_0_HW);
             Cy_ADCMic_EnableTimer(adcmic_0_HW);
-            Cy_ADCMic_StartConvert(adcmic_0_HW);
             adc_drv_state = ADC_DC_MON_ON;
 
             /* Do not allow the device to go to DS */
@@ -133,17 +152,18 @@ void adc_dc_cap_start(void)
 
 }
 
-/*******************************************************************************
-* Function Name: batmon_timer_cb
-********************************************************************************
-* Summary:
-*  Timer cb to start ADC DC monitoring.
-*
-*  Parameters:
-*  cb_param: Argument to cb
-*
-*******************************************************************************/
-void batmon_timer_cb(TimerHandle_t cb_params)
+/**
+ * Function Name:
+ * batmon_timer_cb
+ *
+ * Function Description:
+ * @brief Timer cb to start ADC DC monitoring.
+ *
+ * @param cb_param: Argument to cb
+ *
+ * @return void
+ */
+static void batmon_timer_cb(TimerHandle_t cb_params)
 {
 
    (void)cb_params;
@@ -152,18 +172,22 @@ void batmon_timer_cb(TimerHandle_t cb_params)
 
 #ifndef PDM_MIC
 
-/*******************************************************************************
-* Function Name: adc_dc_cap_stop
-********************************************************************************
-* Summary:
-*  Stops the ADC DC monitoring.
-*
-*******************************************************************************/
-void adc_dc_cap_stop()
+/**
+ * Function Name:
+ * adc_dc_cap_stop
+ *
+ * Function Description:
+ * @brief Stops the ADC DC monitoring.
+ *
+ * @param void
+ *
+ * @return void
+ *
+ */
+static void adc_dc_cap_stop(void)
 {
     Cy_ADCMic_SetInterruptMask(adcmic_0_HW, 0);
     Cy_ADCMic_DisableTimer(adcmic_0_HW);
-    Cy_ADCMic_StopConvert(adcmic_0_HW); /* Stop the conversion */
     Cy_ADCMic_Disable(adcmic_0_HW);
     adc_drv_state = ADC_IDLE;
     dc_sample_cnt = 0 ;
@@ -172,21 +196,21 @@ void adc_dc_cap_stop()
     cyhal_syspm_unlock_deepsleep();
 }
 
-/*******************************************************************************
-* Function Name: adc_dc_monitoring_enable
-********************************************************************************
-* Summary:
-*  Function to Enable/Disable ADC DC monitoring
-*
-*  Parameters:
-*  en: Enable/Disable
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * adc_dc_monitoring_enable
+ *
+ * Function Description:
+ * @brief Function to Enable/Disable ADC DC monitoring
+ *
+ * @param en Enable/Disable
+ *
+ * @return void
+ */
 void adc_dc_monitoring_enable(uint8_t en)
 {
     if(en)
     {
-        adcmic_0_HW->ADC_PD_CTRL = 0;
         /* Set the state ADC driver State to IDLE */
         adc_drv_state = ADC_IDLE;
 
@@ -224,15 +248,20 @@ void adc_dc_monitoring_enable(uint8_t en)
 }
 #endif
 
-/*******************************************************************************
-* Function Name: adcmic_dc_intr_handler
-********************************************************************************
-* Summary:
-*  ADC DC Measurement ISR handler. On Every ISR, one DC measurement is read and
-*  stored. Once the Number of DC samples are read for averaging, It sends
-*  notification battery monitoring task for further processing.
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * adcmic_dc_intr_handler
+ *
+ * Function Description:
+ * @brief
+ *  ADC DC Measurement ISR handler. On Every ISR, one DC measurement is read and
+ *  stored. Once the Number of DC samples are read for averaging, It sends
+ *  notification battery monitoring task for further processing.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void adcmic_dc_intr_handler(void)
 {
     BaseType_t xHigherPriorityTaskWoken;
@@ -257,9 +286,9 @@ static void adcmic_dc_intr_handler(void)
         dc_sample_cnt =0 ;
 
         /* Stop the conversion */
-        Cy_ADCMic_StopConvert(adcmic_0_HW);
+        Cy_ADCMic_Disable(adcmic_0_HW);
         Cy_ADCMic_SetInterruptMask(adcmic_0_HW, 0);
-        adcmic_0_HW->ADC_PD_CTRL = 0;
+
 
         /* Set the ADC Driver state to IDLE once DC measurement is done */
         adc_drv_state = ADC_IDLE;
@@ -271,13 +300,19 @@ static void adcmic_dc_intr_handler(void)
         Cy_ADCMic_EnableTimer(adcmic_0_HW);
 }
 
-/*******************************************************************************
-* Function Name: pdm_pcm_capture_start
-********************************************************************************
-* Summary:
-*  Start/Stops PDM/PCM to capture audio data
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * pdm_pcm_capture_start
+ *
+ * Function Description:
+ * @brief
+ *  Start/Stops PDM/PCM to capture audio data
+ *
+ * @param void
+ *
+ * @return void
+ *
+ */
 static void batmon_init(void)
 {
     /* Register the interrupt handler of ADCMIC Irq */
@@ -285,6 +320,7 @@ static void batmon_init(void)
     NVIC_ClearPendingIRQ(ADCMIC_IRQ_cfg.intrSrc);
     NVIC_EnableIRQ(ADCMIC_IRQ_cfg.intrSrc);
 
+    Cy_SysPm_RegisterCallback(&syspm_batmon_hb_cb_handler);
     /* Create a Periodic timer for Battery Monitoring */
     batmon_timer_h = xTimerCreate("Battery Monitoring Timer",
                                 BATMON_TIMEOUT_IN_MS,
@@ -315,15 +351,18 @@ static void batmon_init(void)
     printf("batmon timer started!\r\n");
 }
 
-/*******************************************************************************
-* Function Name: send_batmon_msg_to_hid_msg_q
-********************************************************************************
-* Summary:
-*  Sends battery capacity level to HID queue
-*
-* Parameters:
-*  batt_level: Battery capacity level
-*******************************************************************************/
+/**
+ * Function Name:
+ * send_batmon_msg_to_hid_msg_q
+ *
+ * Function Description:
+ * @brief
+ *  Sends battery capacity level to HID queue
+ *
+ * @param batt_level Battery capacity level
+ *
+ * @return void
+ */
 static void send_batmon_msg_to_hid_msg_q(uint8_t batt_level)
 {
     struct hid_rpt_msg batmon_msg;
@@ -336,17 +375,19 @@ static void send_batmon_msg_to_hid_msg_q(uint8_t batt_level)
     }
 }
 
-/*******************************************************************************
-* Function Name: batmon_task
-********************************************************************************
-* Summary:
-*  Battery Monitoring Task Handler: This task function creates timer, mutex and
-*  processes the ADC measurement data, converts it to the battery capacity level
-*
-* Parameters:
-*  arg: Not used
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * batmon_task
+ *
+ * Function Description:
+ * @brief
+ *  Battery Monitoring Task Handler: This task function creates timer, mutex and
+ *  processes the ADC measurement data, converts it to the battery capacity level
+ *
+ * @param arg Not used
+ *
+ * @return void
+ */
 static void batmon_task(void *arg)
 {
     uint32_t ulNotifiedValue;
@@ -370,7 +411,7 @@ static void batmon_task(void *arg)
         batmon_dc_avg = batmon_dc_avg/NO_OF_DC_SAMPLES;
 
         /* get the DC data to MV and convert it ot battery capacity */
-        batt_level_mv = Cy_ADCMic_CountsTo_mVolts(adcmic_0_HW, (uint16_t)batmon_dc_avg);
+        batt_level_mv = Cy_ADCMic_CountsTo_mVolts((uint16_t)batmon_dc_avg, adcmic_0_config.dcConfig->context );
         if(batt_level_mv >= BATT_LVL_100_MV)
         {
             batt_cap = 100;
@@ -408,13 +449,17 @@ static void batmon_task(void *arg)
     }
 }
 
-/*******************************************************************************
-* Function Name: batmon_task_init
-********************************************************************************
-* Summary:
-*  This function creates task for Battery Monitoring
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * batmon_task_init
+ *
+ * Function Description:
+ * @brief This function creates task for Battery Monitoring
+ *
+ * @param void
+ *
+ * @return void
+ */
 
 void batmon_task_init(void)
 {
@@ -430,5 +475,58 @@ void batmon_task_init(void)
 
 }
 
+/**
+ * Function Name:
+ * syspm_batmon_hb_cb
+ *
+ * Function Description:
+ * @brief Hibernate Callback Function
+ *
+ * @param callbackParams
+ * @param mode
+ *
+ * @return cy_en_syspm_status_t
+ */
+CY_SECTION_RAMFUNC_BEGIN
+cy_en_syspm_status_t
+syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
+                              cy_en_syspm_callback_mode_t mode)
+{
+    cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
+    CY_UNUSED_PARAMETER(callbackParams);
+
+    switch(mode)
+    {
+        case CY_SYSPM_CHECK_READY:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_CHECK_FAIL:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_BEFORE_TRANSITION:
+        /* Performs the actions to be done before entering the low power mode */
+        {
+#ifdef FLASH_POWER_DOWN
+            flash_memory_power_down();
+#endif
+            // Disable SMIF
+            smif_disable();
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        default:
+            break;
+    }
+
+    return retVal;
+}
+CY_SECTION_RAMFUNC_END
 
 /* [] END OF FILE */

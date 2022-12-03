@@ -12,7 +12,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,62 +45,49 @@
 *******************************************************************************/
 
 /*******************************************************************************
-*        Header Files
+*                               Header Files
 *******************************************************************************/
 #include "cybsp.h"
 #include "cybsp_bt_config.h"
 #include "cyhal.h"
-#include "cyhal_gpio.h"
-#include "stdio.h"
-#include "cyabs_rtos.h"
-#include "cy_syspm.h"
 #include "cy_sysclk.h"
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
-#include <string.h>
-
+#if (defined(RED_LED_ENABLE)) || (defined(GREEN_LED_ENABLE))
+#include "app_hw_gpio.h"
+#endif
 #include "app_bt_event_handler.h"
+#include "cycfg_gap.h"
+#include "cycfg_bt_settings.h"
+#include "wiced_memory.h"
+#include "app_bt_utils.h"
 #include "app_hw_handler.h"
+#ifdef VOICE_REMOTE
 #include "app_hw_keyscan.h"
+#else
+#include "app_hw_button.h"
+#endif
 #include "app_hw_serial_flash.h"
+#include "app_bt_hid.h"
 #include "audio.h"
 #include "timers.h"
 #include "app_hw_batmon.h"
 #include "cybt_platform_hci.h"
 #include "cybt_platform_trace.h"
+
 #ifdef ENABLE_BT_SPY_LOG
 #include "cybt_debug_uart.h"
 #else
 #include "cy_retarget_io.h"
 #endif
 
-
-/*******************************************************************************
-*        Macro Definitions
-*******************************************************************************/
-#ifdef NO_LOGGING
-#define printf(fmt, ...)     (void)0
-#endif
-
 #ifdef ENABLE_BT_SPY_LOG
 #define printf               WICED_BT_TRACE
 #endif
-
-/* FreeRTOS Task Configurations of various  Bluetooth LE Voice Remote Tasks */
-
-/* Task names for  Bluetooth LE Voice Remote tasks */
-#define BLE_TASK_NAME                   "BLE Task"
-#define KEYSCAN_TASK_NAME               "Keyscan Task"
-
-
-/* Stack sizes for  Bluetooth LE Voice Remote tasks */
-#define BLE_TASK_STACK_SIZE                 (512u)
-#define KEYSCAN_TASK_STACK_SIZE             (512u)
-
-/* Task Priorities of  Bluetooth LE Voice Remote Tasks */
-#define BLE_TASK_PRIORITY                   (1)
-#define KEYSCAN_TASK_PRIORITY               (configMAX_PRIORITIES - 2)
+/*******************************************************************************
+*                               Macro Definitions
+*******************************************************************************/
 
 /* Sufficient Heap size for Bluetooth activities */
 #define BT_HEAP_SIZE                        (0x1000)
@@ -108,11 +95,7 @@
 /*******************************************************************************
 *                           Global Variables
 *******************************************************************************/
-/* Task and Queue Handles of  Bluetooth LE Voice Remote Application  */
-TaskHandle_t ble_task_h;
-
-extern TaskHandle_t keyscan_task_h;
-
+/* Queue Handles of  Bluetooth LE Voice Remote Application  */
 extern QueueHandle_t hid_rpt_q;
 
 /*Kvstore block device*/
@@ -122,48 +105,23 @@ const cybt_platform_config_t bt_platform_cfg_settings =
 {
     .hci_config =
     {
-        #if (defined (CYW20829A0LKML)) || (defined (CYW20829_PSVP)) || (defined (BLESS_PORTING_LAYER))
         .hci_transport = CYBT_HCI_IPC,
-        #else
-        .hci_transport = CYBT_HCI_UART,
-        .hci =
-        {
-            .hci_uart =
-            {
-                .uart_tx_pin = CYBSP_BT_UART_TX,
-                .uart_rx_pin = CYBSP_BT_UART_RX,
-                .uart_rts_pin = CYBSP_BT_UART_RTS,
-                .uart_cts_pin = CYBSP_BT_UART_CTS,
-
-                .baud_rate_for_fw_download = 115200,
-                .baud_rate_for_feature     = 115200,
-
-                .data_bits = 8,
-                .stop_bits = 1,
-                .parity = CYHAL_UART_PARITY_NONE,
-                .flow_control = WICED_TRUE
-            }
-        }
-        #endif
     },
 
     .controller_config =
-        {
-            .bt_power_pin      = NC,
-            #if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
-                       ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
-                       (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
+    {
+        #if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
+                    ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
+                    (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
             .sleep_mode = { .sleep_mode_enabled = 1 },
-            #else
+        #else
             .sleep_mode = { .sleep_mode_enabled = 0 },
-            #endif
-        },
-
-    .task_mem_pool_size    = 2048
+        #endif
+    },
 };
 
 /*******************************************************************************
-*        Function Prototypes
+*                           Function Prototypes
 *******************************************************************************/
 
 /* Function to initialize the various tasks for the Bluetooth LE Remote application */
@@ -173,8 +131,8 @@ static void remote_tasks_init(void);
  *                          Function Definitions
  ******************************************************************************/
 
-/*
- *  Entry point to the application. Set device configuration and start BT
+/**
+ *  @brief Entry point to the application. Set device configuration and start BT
  *  stack initialization.  The actual application initialization will happen
  *  when stack reports that BT device is ready.
  */
@@ -188,8 +146,19 @@ int main(void)
     Cy_GPIO_Pin_FastInit(GPIO_PRT0, 1U, 0x00U, 0x00U, HSIOM_SEL_GPIO);
     Cy_GPIO_Pin_FastInit(GPIO_PRT0, 2U, 0x00U, 0x00U, HSIOM_SEL_GPIO);
     Cy_SysClk_PeriPclkDisableDivider((en_clk_dst_t)PERI_0_GROUP_3_DIV_16_5_0_GRP_NUM, CY_SYSCLK_DIV_16_5_BIT, 0U);
-#endif
 
+
+    /* Disable the Unused Peripheral IP Slaves */
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(0, CY_SYSCLK_PERI_GROUP_SL_CTL2, 0xFFFFFF80U);
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(1, CY_SYSCLK_PERI_GROUP_SL_CTL2, 0xFFFFFDBCU);
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(2, CY_SYSCLK_PERI_GROUP_SL_CTL2, 0xFFFFFF19U);
+
+
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(0, CY_SYSCLK_PERI_GROUP_SL_CTL, 0x0000007FU);
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(1, CY_SYSCLK_PERI_GROUP_SL_CTL, 0x00000243U);
+    (void)Cy_SysClk_PeriGroupSetSlaveCtl(2, CY_SYSCLK_PERI_GROUP_SL_CTL, 0x000000E6U);
+
+#endif
     /* Enable global interrupts */
     __enable_irq();
 
@@ -206,8 +175,16 @@ int main(void)
 
 
 /**
- * @brief Initializes all the FreeRTOS tasks needed for the voice remote
- * application.
+ *  Function name:
+ *  remote_tasks_init
+ *
+ *  Function Description:
+ *  @brief Initializes all the FreeRTOS tasks needed for the voice remote
+ *  application
+ *
+ *  @param void
+ *
+ *  @return void
  *
  */
 static void remote_tasks_init(void)
@@ -276,25 +253,7 @@ static void remote_tasks_init(void)
         printf("Heap create Failed");
     }
 
-    /* Initialize the status LED for connection and advertisement */
-    /* The status LED toggles for every non-audio notifications */
-    /* Initialize the User LED */
-    //app_status_led_init();
-
-    /* Initialize Bluetooth LE task or Stack */
-    if( pdPASS != xTaskCreate(app_ble_task,
-                              BLE_TASK_NAME,
-                              BLE_TASK_STACK_SIZE,
-                              NULL,
-                              BLE_TASK_PRIORITY,
-                              &ble_task_h))
-    {
-        /* Task is not created due to insufficient Heap memory.
-         * Use vApplicationMallocFailedHook() callback to trap.
-         * And xPortGetFreeHeapSize() to query unallocated heap memory
-         */
-        printf("Bluetooth LE Task creation failed");
-    }
+    ble_task_init();
 
     /* Creates Task and Queue for Encoder */
     audio_task_init();
@@ -302,6 +261,18 @@ static void remote_tasks_init(void)
     xmit_task_init();
 
     batmon_task_init();
+
+    /* Initialize the RED and GREEN LED for connection, advertisement and notifications */
+#if defined (RED_LED_ENABLE)
+    app_status_led_init(RED_LED);
+#endif
+
+#if defined (GREEN_LED_ENABLE)
+    cyhal_gpio_init(GREEN_LED,
+                    CYHAL_GPIO_DIR_OUTPUT,
+                    CYHAL_GPIO_DRIVE_PULLDOWN,
+                    CYBSP_LED_STATE_OFF);
+#endif
 
     // Keyscan Queue to send msgs to Bluetooth LE Task
     hid_rpt_q =  xQueueCreate(HID_MSG_Q_SZ, HID_MSG_Q_ITEM_SZ);
@@ -311,25 +282,12 @@ static void remote_tasks_init(void)
         CY_ASSERT(0);
     };
 
-    // Workaround for device configurator bug on Keyscan. - Now fixed.
-    // init_ks_gpio_pins();
-
-    /* Initialize the Keyscan task */
-    if( pdPASS != xTaskCreate(keyscan_task,
-                              KEYSCAN_TASK_NAME,
-                              KEYSCAN_TASK_STACK_SIZE,
-                              NULL,                     /* (void*) &xBatmonTaskParam */
-                              KEYSCAN_TASK_PRIORITY,
-                              &keyscan_task_h))
-    {
-        /* Task is not created due to insufficient Heap memory.
-         * Use vApplicationMallocFailedHook() callback to trap.
-         * And xPortGetFreeHeapSize() to query unallocated heap memory
-         */
-        printf("Keyscan Task creation failed");
-    }
-
-    /* Initialize the IR task */
+    #ifdef VOICE_REMOTE
+        keyscan_task_init();
+    #else
+        button_task_init();
+    #endif
+    /* TODO Future Task: Initialize the IR task */
 
 
 }

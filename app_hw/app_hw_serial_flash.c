@@ -8,7 +8,7 @@
 *
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -49,9 +49,15 @@
 #include "app_hw_serial_flash.h"
 
 /*******************************************************************************
+ *                              Macro Definitions
+ ******************************************************************************/
+#define FLASH_POWER_DOWN_CMD    (0xB9)
+#define FLASH_POWER_UP_CMD      (0xAB)
+
+/*******************************************************************************
  *                              GLOBAL DECLARATIONS
  ******************************************************************************/
-extern cy_stc_smif_context_t SMIFContext;
+extern cy_stc_smif_context_t cybsp_smif_context;
 
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
@@ -74,8 +80,8 @@ static cy_rslt_t bd_erase(void* context, uint32_t addr, uint32_t length);
  * Function Description:
  * @brief Function to get the read size of the block device for a specific address.
  *
- * @param  void* context : Context object that is passed into mtb_kvstore_init
-           uint32_t addr : Address for which the read size is queried. This address is passed in as start_addr + offset.
+ * @param  context void* type Context object that is passed into mtb_kvstore_init
+*  @param  addr uint32_t type Address for which the read size is queried. This address is passed in as start_addr + offset.
  *
  *
  * @return uint32_t: Read size of the memory device.
@@ -95,8 +101,8 @@ static uint32_t bd_read_size(void* context, uint32_t addr)
  * Function Description:
  * @brief Function to get the program size of the block device for a specific address.
  *
- * @param  void* context: Context object that is passed into mtb_kvstore_init
-           uint32_t addr: Address for which the program size is queried. This address is passed in as start_addr + offset.
+ * @param context void* : Context object that is passed into mtb_kvstore_init
+ * @param addr uint32_t : Address for which the program size is queried. This address is passed in as start_addr + offset.
  *
  *
  * @return uint32_t: Program size of the memory device.
@@ -115,12 +121,11 @@ static uint32_t bd_program_size(void* context, uint32_t addr)
  * Function Description:
  * @brief Function prototype to get the erase size of the block device for a specific address.
  *
- * @param  void* context: Context object that is passed into mtb_kvstore_init
-           uint32_t addr: Address for which the program size is queried. This address is passed in as start_addr + offset.
- *
+ * @param context void* type :Context object that is passed into mtb_kvstore_init
+ * @param addr uint32_t type : Address for which the program size is queried. This address is passed in as start_addr + offset.
  *
  * @return uint32_t Erase size of the memory device.
- * */
+ */
 static uint32_t bd_erase_size(void* context, uint32_t addr)
 {
     (void)context;
@@ -149,14 +154,14 @@ static uint32_t bd_erase_size(void* context, uint32_t addr)
  * Function Description:
  * @brief Function for reading data from the block device.
  *
- * @param  void* context : Context object that is passed into mtb_kvstore_init
-           uint32_t addr: Address to read the data from the block device. This address is passed in as start_addr + offset
-           uint32_t length : Length of the data to be read into the buffer
-           uint8_t* buf : Buffer to read the data.
+ * @param  context - void* type - Context object that is passed into mtb_kvstore_init
+ * @param  addr - uint32_t type - Address to read the data from the block device. This address is passed in as start_addr + offset
+ * @param  length -uint32_t type - Length of the data to be read into the buffer
+ * @param  buf - uint8_t* type - Buffer to read the data.
  *
  *
  * @return cy_rslt_t: Result of the read operation.
- * */
+ */
 static cy_rslt_t bd_read(void* context, uint32_t addr, uint32_t length, uint8_t* buf)
 {
     (void)context;
@@ -164,7 +169,7 @@ static cy_rslt_t bd_read(void* context, uint32_t addr, uint32_t length, uint8_t*
     // Cy_SMIF_MemRead() returns error if (addr + length) > total flash size.
     result = (cy_rslt_t)Cy_SMIF_MemRead(SMIF0, smifBlockConfig.memConfig[0],
             addr,
-            buf, length, &SMIFContext);
+            buf, length, &cybsp_smif_context);
 
     return result;
 }
@@ -174,14 +179,15 @@ static cy_rslt_t bd_read(void* context, uint32_t addr, uint32_t length, uint8_t*
  * bd_program
  *
  * Function Description:
- * @brief
+ * @brief Function to write/program data into the block device.
  *
- * @param  void* context : Context object that is passed into mtb_kvstore_init
-           uint32_t addr: Address to program the data into the block device. This address is passed in as start_addr + offset
-           uint32_t length : Length of the data to be written
-           uint8_t* buf : Data that needs to be written
+ * @param  context void* type : Context object that is passed into mtb_kvstore_init
+ * @param  addr uint32_t type : Address to program the data into the block device. This address is passed in as start_addr + offset
+ * @param  length uint32_t type : Length of the data to be written
+ * @param  buf uint8_t* type : Data that needs to be written
+ *
  * @return cy_rslt_t: Result of the program operation.
- **/
+ */
 static cy_rslt_t bd_program(void* context, uint32_t addr, uint32_t length, const uint8_t* buf)
 {
     (void)context;
@@ -189,7 +195,7 @@ static cy_rslt_t bd_program(void* context, uint32_t addr, uint32_t length, const
     // Cy_SMIF_MemWrite() returns error if (addr + length) > total flash size.
     result = (cy_rslt_t)Cy_SMIF_MemWrite(SMIF0, smifBlockConfig.memConfig[0],
             addr,
-            (uint8_t*)buf, length, &SMIFContext);
+            (uint8_t*)buf, length, &cybsp_smif_context);
 
     return result;
 }
@@ -199,15 +205,15 @@ static cy_rslt_t bd_program(void* context, uint32_t addr, uint32_t length, const
  * bd_erase
  *
  * Function Description:
- * @brief
+ * @brief Function to erase data from the device
  *
- * @param  context: Context object that is passed into mtb_kvstore_init
-           uint32_t addr: Address to erase the data from the device. This address is passed in as start_addr + offset
-           uint32_t length: Length of the data that needs to be erased
+ * @param  context void* type : Context object that is passed into mtb_kvstore_init
+ * @param  addr uint32_t type : Address to erase the data from the device. This address is passed in as start_addr + offset
+ * @param  length uint32_t type : Length of the data that needs to be erased
  *
  *
  * @return cy_rslt_t : Result of the erase operation.
- **/
+ */
 static cy_rslt_t bd_erase(void* context, uint32_t addr, uint32_t length)
 {
     (void)context;
@@ -218,7 +224,7 @@ static cy_rslt_t bd_erase(void* context, uint32_t addr, uint32_t length)
         result =
                 (cy_rslt_t)Cy_SMIF_MemEraseChip(SMIF0,
                         smifBlockConfig.memConfig[0],
-                        &SMIFContext);
+                        &cybsp_smif_context);
     }
     else
     {
@@ -228,7 +234,7 @@ static cy_rslt_t bd_erase(void* context, uint32_t addr, uint32_t length)
         result =
                 (cy_rslt_t)Cy_SMIF_MemEraseSector(SMIF0,
                         smifBlockConfig.memConfig[0],
-                        addr, length, &SMIFContext);
+                        addr, length, &cybsp_smif_context);
     }
 
     return result;
@@ -241,10 +247,10 @@ static cy_rslt_t bd_erase(void* context, uint32_t addr, uint32_t length)
  * Function Description:
  * @brief  This function provides the pointer to the implementated prototype function for the block device.
  *
- * @param  mtb_kvstore_bd_t : Block device interface
+ * @param  device mtb_kvstore_bd_t type : Block device interface
  *
  * @return void
- **/
+ */
 void app_flash_bd_init(mtb_kvstore_bd_t* device)
 {
     device->read         = bd_read;
@@ -255,3 +261,41 @@ void app_flash_bd_init(mtb_kvstore_bd_t* device)
     device->erase_size   = bd_erase_size;
     device->context      = NULL;
 }
+
+/**
+ * Function Name:
+ * flash_memory_power_down
+ *
+ * Function Description:
+ * @brief  This function puts the Flash to Power down state.
+ *
+ * @return void
+ **/
+void flash_memory_power_down()
+{
+    Cy_SMIF_TransmitCommand(SMIF0, FLASH_POWER_DOWN_CMD, CY_SMIF_WIDTH_SINGLE, NULL, CY_SMIF_CMD_WITHOUT_PARAM,
+                                    CY_SMIF_WIDTH_NA, CY_SMIF_SLAVE_SELECT_0, CY_SMIF_TX_LAST_BYTE,
+                                    &cybsp_smif_context);
+    while(Cy_SMIF_BusyCheck(SMIF0));
+}
+
+CY_SECTION_RAMFUNC_BEGIN
+/**
+ * Function Name:
+ * flash_memory_power_up
+ *
+ * Function Description:
+ * @brief  This function recovers the flash from Power down state.
+ *
+ * @return void
+ **/
+void flash_memory_power_up()
+{
+    Cy_SMIF_TransmitCommand(SMIF0, FLASH_POWER_UP_CMD, CY_SMIF_WIDTH_SINGLE, NULL, CY_SMIF_CMD_WITHOUT_PARAM,
+                                     CY_SMIF_WIDTH_NA, CY_SMIF_SLAVE_SELECT_0, CY_SMIF_TX_LAST_BYTE,
+                                     &cybsp_smif_context);
+    while(Cy_SMIF_BusyCheck(SMIF0));
+    Cy_SysLib_DelayUs(15);
+
+}
+CY_SECTION_RAMFUNC_END

@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -42,7 +42,7 @@
 #define __APP_HW_BATMON_H
 
 /*******************************************************************************
- * Data structure and enumeration
+ *                          Global variables
  ******************************************************************************/
 typedef enum
 {
@@ -51,13 +51,10 @@ typedef enum
     ADC_IDLE
 }adc_driver_state_t;
 
-/*******************************************************************************
- * Global variable
- ******************************************************************************/
 extern volatile adc_driver_state_t adc_drv_state;
 
 /*******************************************************************************
- * Function prototype
+ *                          Function prototype
  ******************************************************************************/
 void adc_dc_monitoring_enable(uint8_t en);
 void batmon_task_init(void);

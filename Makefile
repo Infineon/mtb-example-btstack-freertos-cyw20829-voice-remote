@@ -28,6 +28,14 @@
 # Basic Configuration
 ################################################################################
 
+# Type of ModusToolbox Makefile Options include:
+#
+# COMBINED    -- Top Level Makefile usually for single standalone application
+# APPLICATION -- Top Level Makefile usually for multi project application
+# PROJECT     -- Project Makefile under Application
+#
+MTB_TYPE=COMBINED
+
 # Target board/hardware (BSP).
 # To change the target, it is recommended to use the Library manager 
 # ('make modlibs' from command line), which will also update Eclipse IDE launch 
@@ -44,7 +52,7 @@ APPNAME=mtb-example-btstack-freertos-cyw20829-voice-remote
 
 # Name of toolchain to use. Options include:
 #
-# GCC_ARM -- GCC 7.2.1, provided with ModusToolbox IDE
+# GCC_ARM -- GCC provided with ModusToolbox software
 # ARM     -- ARM Compiler (must be installed separately)
 # IAR     -- IAR Compiler (must be installed separately)
 #
@@ -80,12 +88,10 @@ VERBOSE=
 # ... then code in directories named COMPONENT_foo and COMPONENT_bar will be
 # added to the build
 #
-
-COMPONENTS=FREERTOS WICED_BLE CUSTOM_DESIGN_MODUS FIRMWARE-TX10 BTSS-IPC
+COMPONENTS=FREERTOS WICED_BLE
 
 # Like COMPONENTS, but disable optional code that was enabled by default.
-DISABLE_COMPONENTS=BSP_DESIGN_MODUS
-
+DISABLE_COMPONENTS=
 
 # By default the build system automatically looks in the Makefile's directory
 # tree for source code and builds it. The SOURCES variable can be used to
@@ -105,18 +111,60 @@ OPUS_CODEC = 2
 ANALOG_MIC = 1
 PDM_MIC = 2
 
+ENABLE_RED_LED = 0
+ENABLE_GREEN_LED = 0
+
+# To Power Off the Flash when not active. This requires a special recovery procedure to download a new firmware if enabled.
+FLASH_POWER_DOWN_ENABLE = 1
+
 # The following variable controls which codec is used. And BT-Configurator opens
 # the respective design.cybt. Make clean will not delete the GeneratedSource
 # directory. Needs to be cleaned manually.
 ENABLE_CODEC = $(ATV_ADPCM)
+
+ifeq ($(TARGET), $(filter $(TARGET), APP_CYW920829M2EVB-01))
+CY_IGNORE+=./app_hw/app_hw_keyscan.c ./app_hw/app_hw_batmon.c
+ENABLE_MIC = $(PDM_MIC)
+ENABLE_RED_LED = 0
+ENABLE_GREEN_LED = 0
+
+ifeq ($(ENABLE_MIC) , $(ANALOG_MIC))
+$(error CYW920829M2EVB-01 BLE Remote app support digital mic only. )
+endif
+
+endif
+
+ifeq ($(TARGET), $(filter $(TARGET), APP_CYW920829-VR))
+DEFINES+=VOICE_REMOTE
+CY_IGNORE+=./app_m2_evb
 ENABLE_MIC = $(ANALOG_MIC)
+
+ifeq ($(ENABLE_RED_LED),1)
+DEFINES+=RED_LED_ENABLE
+endif
+
+ifeq ($(ENABLE_GREEN_LED),1)
+DEFINES+=GREEN_LED_ENABLE
+endif
+
+ifeq ($(FLASH_POWER_DOWN_ENABLE),1)
+DEFINES+=FLASH_POWER_DOWN
+endif
+
+ifneq ($(ENABLE_RED_LED),1)
+ifneq ($(ENABLE_GREEN_LED),1)
+CY_IGNORE+=./app_hw/app_hw_gpio.c
+endif
+endif
+
+endif
 
 ifeq ($(ENABLE_CODEC),$(ATV_ADPCM))
 
 # Add additional defines to the build process (without a leading -D).
-DEFINES=CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE STACK_INSIDE_FREE_RTOS CONFIG_ADPCM_CODEC ATV_ADPCM BATTERY_SERVICE TEST_PATCH_RAM_DOWNLOAD DEBUG
-CY_IGNORE=./opus-1.3.1 ./app_audio/cy_opus.c ./app_bt/app_bt_hid_bsa.c ./COMPONENT_CUSTOM_DESIGN_MODUS/OPUS ./app_bt_configs/bsa_opus
-
+DEFINES+=CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE STACK_INSIDE_FREE_RTOS CONFIG_ADPCM_CODEC ATV_ADPCM BATTERY_SERVICE TEST_PATCH_RAM_DOWNLOAD DEBUG
+CY_IGNORE+=./opus-1.3.1 ./app_audio/cy_opus.c ./app_bt/app_bt_hid_bsa.c ./app_bt_configs/bsa_opus
+LINKER_SCRIPT=./linker_file/cyw20829_ns_flash_adpcm.ld
 ifeq ($(ENABLE_MIC),$(PDM_MIC))
 DEFINES+=PDM_MIC
 CY_IGNORE+=./app_audio/adc_mic.c
@@ -124,13 +172,12 @@ else ifeq ($(ENABLE_MIC),$(ANALOG_MIC))
 CY_IGNORE+=./app_audio/pdm_mic.c
 endif
 
-# COMPONENTS=FREERTOS WICED_BLE CUSTOM_ADPCM_DESIGN_MODUS
-INCLUDES=./app_configs ./COMPONENT_CUSTOM_DESIGN_MODUS/ADPCM/GeneratedSource
+INCLUDES=./app_configs
 CFLAGS+=-Og
 else ifeq ($(ENABLE_CODEC),$(OPUS_CODEC))
 
-DEFINES=CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE STACK_INSIDE_FREE_RTOS HAVE_CONFIG_H OPUS_ARM_ASM CONFIG_OPUS_CODEC BSA_OPUS BATTERY_SERVICE TEST_PATCH_RAM_DOWNLOAD DEBUG
-CY_IGNORE=./app_audio/cy_adpcm.c ./app_audio/adpcm.h ./app_audio/adpcm.c ./app_bt/app_bt_hid_atv.c ./COMPONENT_CUSTOM_DESIGN_MODUS/ADPCM ./app_bt_configs/atv_adpcm
+DEFINES+=CY_RETARGET_IO_CONVERT_LF_TO_CRLF CY_RTOS_AWARE STACK_INSIDE_FREE_RTOS HAVE_CONFIG_H OPUS_ARM_ASM CONFIG_OPUS_CODEC BSA_OPUS BATTERY_SERVICE TEST_PATCH_RAM_DOWNLOAD DEBUG
+CY_IGNORE+=./app_audio/cy_adpcm.c ./app_audio/adpcm.h ./app_audio/adpcm.c ./app_bt/app_bt_hid_atv.c ./app_bt_configs/atv_adpcm
 
 ifeq ($(ENABLE_MIC),$(PDM_MIC))
 DEFINES+=PDM_MIC
@@ -139,11 +186,12 @@ else ifeq ($(ENABLE_MIC),$(ANALOG_MIC))
 CY_IGNORE+=./app_audio/pdm_mic.c
 endif
 
-# COMPONENTS=FREERTOS WICED_BLE CUSTOM_OPUS_DESIGN_MODUS
-INCLUDES=./app_configs ./COMPONENT_CUSTOM_DESIGN_MODUS/OPUS/GeneratedSource
+INCLUDES=./app_configs
 CFLAGS+=-O2
 LINKER_SCRIPT=./linker_file/cyw20829_ns_flash_cbus.ld
 endif
+
+CY_IGNORE+=./templates
 
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=

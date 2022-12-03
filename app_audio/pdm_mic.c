@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -72,16 +72,19 @@ static uint32_t pdm_dbg_intr_cnt;
 static uint32_t overflow_dbg_cnt;
 /******************************************************************************
  *                          Function Definitions
- ******************************************************************************/
+ *****************************************************************************/
 
-/*******************************************************************************
-* Function Name: pdm_overflow_intr_handler
-********************************************************************************
-* Summary:
-*  PDM Overflow ISR handler. Sets up the descriptor for junk buffer to consume
-*  data from the PDM fifo
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * pdm_overflow_intr_handler
+ *
+ * @brief  PDM Overflow ISR handler. Sets up the descriptor for junk buffer to
+ *         consume data from the PDM fifo.
+ *
+ * @param void
+ *
+ * return void
+ */
 static void pdm_overflow_intr_handler(void)
 {
     /* Write to the PDM interrupt register and read from it to clear overflow
@@ -95,15 +98,19 @@ static void pdm_overflow_intr_handler(void)
     overflow_dbg_cnt++;
 }
 
-/*******************************************************************************
-* Function Name: pdm_dma_intr_handler
-********************************************************************************
-* Summary:
-*  PDM DMA ISR handler. An audio frame(320 samples) is received on this interrupt
-*  Sends a message to encoder queue to encode the current pcm buffer (audio frame
-*  received) and sets up the DMA to copy next frame from PDM mic to free pcm buffer.
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * pdm_dma_intr_handler
+ *
+ * @brief  PDM DMA ISR handler. An audio frame(320 samples) is received on this
+ *         interrupt Sends a message to encoder queue to encode the current pcm
+ *  buffer (audio frame received) and sets up the DMA to copy next frame from
+ *  PDM mic to free pcm buffer.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void pdm_dma_intr_handler(void)
 {
     uint8_t idx;
@@ -141,13 +148,17 @@ static void pdm_dma_intr_handler(void)
     pdm_dbg_intr_cnt++;
 }
 
-/*******************************************************************************
-* Function Name: configure_pdm_pcm_dma
-********************************************************************************
-* Summary:
-*  It setups dma descriptor for ping pong buffer and initializes PDM DMA channel
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * configure_pdm_pcm_dma
+ *
+ * @brief  It setups dma descriptor for ping pong buffer and initializes PDM DMA
+ *         channel.
+ *
+ * @param void
+ *
+ * @return void
+ */
 static void configure_pdm_pcm_dma(void)
 {
     cy_en_dma_status_t status;
@@ -212,13 +223,16 @@ static void configure_pdm_pcm_dma(void)
     NVIC_EnableIRQ(PDM_DMA_IRQ_cfg.intrSrc);
 }
 
-/*******************************************************************************
-* Function Name: pdm_pcm_capture_start
-********************************************************************************
-* Summary:
-*  Start/Stops PDM/PCM to capture audio data
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * pdm_pcm_capture_start
+ *
+ * @brief Start/Stops PDM/PCM to capture audio data
+ *
+ * @param en
+ *
+ * @return void
+ */
  void pdm_pcm_capture_start(uint8_t en)
 {
     /* Starts PDM/PCM DMA to capture audio data and unmask irq for dma channel */
@@ -241,13 +255,16 @@ static void configure_pdm_pcm_dma(void)
     }
 }
 
-/*******************************************************************************
-* Function Name: pdm_pcm_init
-********************************************************************************
-* Summary:
-*  Initializes the PDM/PCM block
-*
-*******************************************************************************/
+/**
+ * Function Name:
+ * pdm_pcm_init
+ *
+ * @brief Initializes the PDM/PCM block
+ *
+ * @param void
+ *
+ * @return void
+ */
 void pdm_pcm_init(void)
 {
 

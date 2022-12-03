@@ -9,7 +9,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2021-2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -40,41 +40,25 @@
 * of such system or application assumes all risk of such use and in doing
 * so agrees to indemnify Cypress against all liability.
 *******************************************************************************/
-
-
-/*******************************************************************************
-*        Includes
-*******************************************************************************/
-
 #ifndef __APP_BT_TASK_H__
 #define __APP_BT_TASK_H__
 
-#include "cycfg_gatt_db.h"
-#include "cycfg_gap.h"
-#include "cycfg_bt_settings.h"
-#include "cyabs_rtos.h"
+/*******************************************************************************
+*                               Includes
+*******************************************************************************/
 
-#include "app_bt_gatt_handler.h"
-#include "app_bt_utils.h"
 
 #include "wiced_bt_ble.h"
-#include "wiced_bt_uuid.h"
-#include "wiced_memory.h"
 #include "wiced_bt_stack.h"
-#include "wiced_bt_dev.h"
-#include "wiced_bt_l2c.h"
-
-#include <task.h>
-#include "timers.h"
 
 /*******************************************************************************
-*        Variable Declarations and Macros
+*                           Global Variables
 *******************************************************************************/
 /* Status variable for connection ID */
 extern uint16_t                 app_bt_conn_id;
 
 /*******************************************************************************
-*        Function Prototypes
+*                           Function Prototypes
 *******************************************************************************/
 /* Callback function for Bluetooth stack management type events */
 wiced_bt_dev_status_t
