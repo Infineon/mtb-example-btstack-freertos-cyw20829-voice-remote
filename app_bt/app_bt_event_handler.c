@@ -12,7 +12,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -63,6 +63,10 @@
 #if defined (RED_LED_ENABLE)
 #include "app_hw_gpio.h"
 #endif
+#include "wiced_bt_l2c.h"
+#ifdef ATV_ADPCM
+#include "app_bt_hid_atv.h"
+#endif
 
 /*******************************************************************************
 *                                Macros
@@ -79,7 +83,6 @@
 *******************************************************************************/
 /* Status variable for connection ID */
 uint16_t app_bt_conn_id;
-uint8_t stack_init_done = 0;
 uint8_t reset_bond_data = 0;
 
 /*******************************************************************************
@@ -125,15 +128,12 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
     printf(app_get_btm_event_name(event));
     printf("\r\n");
 
-
-
     switch (event)
     {
 
     case BTM_ENABLED_EVT:
         /* Set Preferred PHY */
 
-        stack_init_done = 1;
         /* Perform application-specific initialization */
         app_bt_init();
 #if (!defined  PDM_MIC)  && (!defined ENABLE_BT_SPY_LOG)
@@ -188,14 +188,6 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
             PAIRING_CAPS_KEYS_FLAG;
         p_event_data->pairing_io_capabilities_ble_request.max_key_size =    \
             PAIRING_CAPS_KEY_SIZE;
-        break;
-
-    case BTM_PIN_REQUEST_EVT:
-        /* HID Remote Device is not capable */
-        break;
-
-    case BTM_PASSKEY_REQUEST_EVT:
-        /* HID Remote Device is not capable */
         break;
 
     case BTM_PAIRED_DEVICE_LINK_KEYS_REQUEST_EVT:
@@ -384,16 +376,30 @@ app_bt_management_callback(wiced_bt_management_evt_t event,
                 p_event_data->ble_phy_update_event.rx_phy);
         break;
 
-    case BTM_DISABLED_EVT:
-        /* Bluetooth Controller and Host Stack Disabled */
-        break;
-
     case BTM_BLE_DATA_LENGTH_UPDATE_EVENT:
         printf("BTM_BLE_DATA_LENGTH_UPDATE_EVENT, \r\n"
                 "Max tx octets is :%d ,\r\n"
                 "Max rx octets is :%d \r\n",
                 p_event_data->ble_data_length_update_event.max_tx_octets,
                 p_event_data->ble_data_length_update_event.max_rx_octets);
+#ifdef ATV_ADPCM
+        // Fix for chromecast
+        if( app_hids_cc_in_report_client_char_config[0] == 0x01 )
+        {
+            app_send_report(28u, 0u);
+            app_send_report(28u, 1u);
+            printf("send conn param request 24 24 33 5\r\n");
+            if (0 != wiced_bt_l2cap_update_ble_conn_params(
+                    peer_bd_addr,
+                    MIN_CI,
+                    MAX_CI,
+                    SLAVE_LATENCY,
+                    SUPERVISION_TO))
+            {
+                printf("Connection parameter update successful\r\n");
+            }
+        }
+#endif
         break;
 
 
@@ -443,7 +449,7 @@ static void app_bt_init(void)
 #ifdef ENABLE_BT_SPY_LOG
         wiced_bt_dev_register_hci_trace(hci_trace_cback);
 #endif
-        wiced_bt_device_address_t local_bda = {0x20, 0x82, 0x9A, 0x00, 0x00, 0x00};
+        wiced_bt_device_address_t local_bda = {0x20, 0x82, 0x9B, 0x00, 0x00, 0x00};
         wiced_bt_set_local_bdaddr( local_bda, BLE_ADDR_PUBLIC);
         wiced_bt_device_address_t  local_device_bd_addr = {0};
         wiced_bt_dev_read_local_addr(local_device_bd_addr);

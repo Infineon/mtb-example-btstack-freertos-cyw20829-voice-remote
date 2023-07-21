@@ -5,7 +5,7 @@
 *              necessary for developing Keyscan use cases.
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -46,6 +46,8 @@
 #include "app_hw_keyscan.h"
 #include "app_hw_gpio.h"
 #include "app_bt_hid.h"
+#include "cy_retarget_io.h"
+#include "cyabs_rtos_dsram.h"
 
 /*******************************************************************************
  *                              Macro Definitions
@@ -67,14 +69,11 @@ TaskHandle_t keyscan_task_h;
 
 cy_stc_keyscan_context_t context;
 
-uint32_t g_PORT_SEL0;
-uint32_t g_PORT_SEL1;
-uint32_t g_CFG;
-uint32_t g_OUT;
 cy_stc_syspm_callback_params_t syspm_ks_ds_params;
+cy_stc_syspm_callback_params_t syspm_ks_dsram_params;
+cy_stc_syspm_callback_params_t syspm_uart_dsram_params;
 uint8_t key_state_cnt;
 uint8_t deepsleep_hold;
-
 
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
@@ -88,14 +87,21 @@ static void app_keyscan_intHandler(void);
 
 static app_keyscan_status_t app_keyscan_interrupt_init(void);
 
-static app_keyscan_status_t app_keyscan_handler_init(void);
+static void app_keyscan_handler_init(void);
 
 static int app_configure_keyscan(void);
 
 static void app_key_detected_callback(void);
 
 cy_en_syspm_status_t
-syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
+                              cy_en_syspm_callback_mode_t mode);
+
+cy_en_syspm_status_t
+app_syspm_ks_dsram_cb(cy_stc_syspm_callback_params_t *callbackParams,
+                              cy_en_syspm_callback_mode_t mode);
+cy_en_syspm_status_t
+app_syspm_uart_dsram_cb(cy_stc_syspm_callback_params_t *callbackParams,
                               cy_en_syspm_callback_mode_t mode);
 
 /*******************************************************************************
@@ -104,13 +110,33 @@ syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
 
 cy_stc_syspm_callback_t syspm_ks_ds_cb_handler =
 {
-    syspm_ks_ds_cb,
+    app_syspm_ks_ds_cb,
     CY_SYSPM_DEEPSLEEP,
     0u,
     &syspm_ks_ds_params,
     NULL,
     NULL,
-    255
+    250
+};
+cy_stc_syspm_callback_t syspm_ks_dsram_cb_handler =
+{
+    app_syspm_ks_dsram_cb,
+    CY_SYSPM_DEEPSLEEP_RAM,
+    0u,
+    &syspm_ks_dsram_params,
+    NULL,
+    NULL,
+    250
+};
+cy_stc_syspm_callback_t syspm_uart_dsram_cb_handler =
+{
+    app_syspm_uart_dsram_cb,
+    CY_SYSPM_DEEPSLEEP_RAM,
+    0u,
+    &syspm_uart_dsram_params,
+    NULL,
+    NULL,
+    0
 };
 
 /* Populate the Sysint configuration structure for Keyscan */
@@ -120,56 +146,9 @@ const cy_stc_sysint_t keyscan_irq_cfg =
     /* .intrPriority */ 7UL
 };
 
-extern uint8_t stack_init_done;
-
 /**
  * Function Name:
- * smif_disable
- *
- * Function Description:
- * @brief it disable the the SMIF.
- *
- * @return CY_SECTION_RAMFUNC_BEGIN
- */
-CY_SECTION_RAMFUNC_BEGIN
-void smif_disable()
-{
-    SMIF0->CTL = SMIF0->CTL & ~SMIF_CTL_ENABLED_Msk;
-    g_PORT_SEL0 = HSIOM_PRT2->PORT_SEL0;
-    g_PORT_SEL1 = HSIOM_PRT2->PORT_SEL1;
-    g_CFG = GPIO_PRT2->CFG;
-    g_OUT = GPIO_PRT2->OUT;
-    HSIOM_PRT2->PORT_SEL0 = 0x00;
-    HSIOM_PRT2->PORT_SEL1 = 0x00;
-    GPIO_PRT2->CFG = 0x600006;
-    GPIO_PRT2->OUT = 0x1;
-}
-CY_SECTION_RAMFUNC_END
-
-/**
- * Function Name:
- * smif_enable
- *
- * Function Description:
- * @brief it enable the SMIF.
- *
- * @return CY_SECTION_RAMFUNC_BEGIN
- */
-CY_SECTION_RAMFUNC_BEGIN
-void smif_enable()
-{
-    SMIF0->CTL = SMIF0->CTL | SMIF_CTL_ENABLED_Msk;
-    HSIOM_PRT2->PORT_SEL0 = g_PORT_SEL0;
-    HSIOM_PRT2->PORT_SEL1 = g_PORT_SEL1;
-    GPIO_PRT2->CFG = g_CFG;
-    GPIO_PRT2->OUT = g_OUT;
-}
-CY_SECTION_RAMFUNC_END
-
-
-/**
- * Function Name:
- * syspm_ks_ds_cb
+ * app_syspm_ks_ds_cb
  *
  * Function Description:
  * @brief DeepSleep Callback Function
@@ -181,7 +160,7 @@ CY_SECTION_RAMFUNC_END
  */
 CY_SECTION_RAMFUNC_BEGIN
 cy_en_syspm_status_t
-syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
                 cy_en_syspm_callback_mode_t mode)
 {
     cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
@@ -214,14 +193,6 @@ syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
                 Cy_SysClk_MfoEnable(true);
             }
 
-#ifdef FLASH_POWER_DOWN
-            if (stack_init_done)
-            {
-                flash_memory_power_down();
-            }
-#endif
-            //Disable SMIF
-            smif_disable();
             retVal = CY_SYSPM_SUCCESS;
         }
         break;
@@ -229,15 +200,7 @@ syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
         case CY_SYSPM_AFTER_DS_WFI_TRANSITION:
         {
 
-            //Enable SMIF
-            smif_enable();
-#ifdef FLASH_POWER_DOWN 
-
-            if(stack_init_done)
-            {
-                flash_memory_power_up();
-            }
-#endif
+            //Enable SM
             retVal = CY_SYSPM_SUCCESS;
         }
         break;
@@ -258,7 +221,151 @@ syspm_ks_ds_cb( cy_stc_syspm_callback_params_t *callbackParams,
 }
 CY_SECTION_RAMFUNC_END
 
+/**
+ * Function Name:
+ * app_syspm_ks_ds_cb
+ *
+ * Function Description:
+ * @brief DeepSleep Callback Function
+ *
+ * @param callbackParams Pointer to cy_stc_syspm_callback_params_t
+ * @param mode cy_en_syspm_callback_mode_t
+ *
+ * @return cy_en_syspm_status_t CY_SYSPM_SUCCESS or CY_SYSPM_FAIL
+ */
+CY_SECTION_RAMFUNC_BEGIN
+cy_en_syspm_status_t
+app_syspm_ks_dsram_cb( cy_stc_syspm_callback_params_t *callbackParams,
+                cy_en_syspm_callback_mode_t mode)
+{
+    cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
+    CY_UNUSED_PARAMETER(callbackParams);
 
+    switch(mode)
+    {
+        case CY_SYSPM_CHECK_READY:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_CHECK_FAIL:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_BEFORE_TRANSITION:
+        /* Performs the actions to be done before entering the low power mode */
+        {
+            if(key_state_cnt == 0 && !deepsleep_hold)
+            {
+                Cy_Keyscan_SetInterruptMask(MXKEYSCAN,  MXKEYSCAN_INTR_KEY_EDGE_DONE);
+                Cy_SysClk_MfoEnable(false);
+            }
+            else
+            {
+                Cy_SysClk_MfoEnable(true);
+            }
+
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_AFTER_DS_WFI_TRANSITION:
+        {
+
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_AFTER_TRANSITION:
+        /* Performs the actions to be done after entering the low power mode */
+        {
+            Cy_Keyscan_SetInterruptMask(MXKEYSCAN, MXKEYSCAN_INTR_FIFO_THRESH_DONE);
+
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        default:
+            break;
+    }
+
+    return retVal;
+}
+CY_SECTION_RAMFUNC_END
+
+
+/**
+ * Function Name:
+ * app_syspm_ks_ds_cb
+ *
+ * Function Description:
+ * @brief DeepSleep Callback Function
+ *
+ * @param callbackParams Pointer to cy_stc_syspm_callback_params_t
+ * @param mode cy_en_syspm_callback_mode_t
+ *
+ * @return cy_en_syspm_status_t CY_SYSPM_SUCCESS or CY_SYSPM_FAIL
+ */
+CY_SECTION_RAMFUNC_BEGIN
+cy_en_syspm_status_t
+app_syspm_uart_dsram_cb( cy_stc_syspm_callback_params_t *callbackParams,
+                cy_en_syspm_callback_mode_t mode)
+{
+    cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
+    CY_UNUSED_PARAMETER(callbackParams);
+
+    switch(mode)
+    {
+        case CY_SYSPM_CHECK_READY:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_CHECK_FAIL:
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_BEFORE_TRANSITION:
+        /* Performs the actions to be done before entering the low power mode */
+        {
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_AFTER_DS_WFI_TRANSITION:
+        {
+
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        case CY_SYSPM_AFTER_TRANSITION:
+        /* Performs the actions to be done after entering the low power mode */
+        {
+            if(Cy_SysLib_IsDSRAMWarmBootEntry())
+            {
+            cy_retarget_io_deinit();
+            cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,115200);
+            Cy_GPIO_SetHSIOM(GPIO_PRT3, 2, HSIOM_SEL_GPIO);
+            }
+
+            retVal = CY_SYSPM_SUCCESS;
+        }
+        break;
+
+        default:
+            break;
+    }
+
+    return retVal;
+}
+CY_SECTION_RAMFUNC_END
 /**
  * Function Name: keyscan_task
  *
@@ -290,9 +397,11 @@ void keyscan_task(void *args)
     }
 
     /* Initialize and Handle Keyscan Hardware configuration */
-    app_ks_result = app_keyscan_handler_init();
+    app_keyscan_handler_init();
 
     Cy_SysPm_RegisterCallback(&syspm_ks_ds_cb_handler);
+    Cy_SysPm_RegisterCallback(&syspm_ks_dsram_cb_handler);
+    Cy_SysPm_RegisterCallback(&syspm_uart_dsram_cb_handler);
 
     while(1)
     {
@@ -307,9 +416,8 @@ void keyscan_task(void *args)
             {
                 printf("Keyscan get next event failed \r\n");
             }
-            //Check value of keycode for the corresponding key being pressed//
+            /*Check value of keycode for the corresponding key being pressed*/
             keyCode = kevent.keyCode;
-            // scanCycle = kevent.scanCycleFlag;
             upDownFlag = kevent.upDownFlag;
 
             if(keyCode == KEYSCAN_KEYCODE_ROLLOVER)
@@ -318,8 +426,6 @@ void keyscan_task(void *args)
             }
             else if(keyCode == KEYSCAN_KEYCODE_END_OF_SCAN_CYCLE)
             {
-                // printf("\r\n End of Scan Cycle event. Added by driver when an event"
-                //         "is occured in different scan cycle. \r\n");
                 Cy_Keyscan_EventsPending(MXKEYSCAN, &events_pending, &context);
                 continue;
             }
@@ -335,13 +441,6 @@ void keyscan_task(void *args)
                 }
                 /* Keycode is calculated as ((no of rows * column num) + row num) */
                 printf("Keycode detected is :%u \r\n", keyCode);
-
-                // printf("Row %u Column %u\r\n",
-                //         (keyCode % keyscan_0_config.noofRows),
-                //         (keyCode / keyscan_0_config.noofRows));
-                // printf("scanCycle  is :%u \r\n", scanCycle);
-                // printf("upDownFlag is :%u \r\n", upDownFlag);
-
                 // Send the keycode to Bluetooth LE task
                 send_msg_to_hid_msg_q(keyCode, upDownFlag);
 
@@ -455,21 +554,19 @@ static int app_configure_keyscan(void)
  *
  * @param void
  *
- * @return app_keyscan_status_t KEYSCAN_FAILURE or KEYSCAN_SUCCESS
+ * @return void
  */
-static app_keyscan_status_t app_keyscan_handler_init(void)
+static void app_keyscan_handler_init(void)
 {
 
     /* Configure Keymatrix size and debounce filters */
     if ( KEYSCAN_SUCCESS != app_configure_keyscan() )
     {
         printf("Keyscan Config failed \r\n");
-        return KEYSCAN_FAILURE;
     }
     else
     {
         printf("Keyscan Config is successful \r\n");
-        return KEYSCAN_SUCCESS;
     }
 
 }
@@ -591,4 +688,11 @@ void keyscan_task_init(void)
         printf("Keyscan Task creation failed");
     }
 }
+
+CY_SECTION_RAMFUNC_BEGIN
+void cyabs_rtos_enter_dsram(void)
+{
+    vStoreDSRAMContextWithWFI();
+}
+CY_SECTION_RAMFUNC_END
 

@@ -38,7 +38,7 @@
 * indemnify Cypress against all liability.
 *******************************************************************************/
 
-#ifndef __CY_ENOCDER_H
+#ifndef __CY_ENCODER_H
 #define __CY_ENCODER_H
 
 

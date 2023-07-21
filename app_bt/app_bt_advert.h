@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -79,9 +79,6 @@ void app_bt_set_adv_filter(wiced_bt_device_address_t bdaddr);
 
 /* This function handles the remote state based on the advert state change */
 void app_bt_advert_state_handler(wiced_bt_ble_advert_mode_t current_adv_mode);
-
-/* This Function starts directed Bluetooth advertisement */
-void app_bt_start_adv_known_host(void);
 
 /* This Function starts undirected Bluetooth advertisement */
 void app_bt_start_adv_any_host(void);

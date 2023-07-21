@@ -12,7 +12,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -112,7 +112,8 @@ const cybt_platform_config_t bt_platform_cfg_settings =
     {
         #if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
                     ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
-                    (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
+                    (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP)|| \
+                    (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP_RAM))
             .sleep_mode = { .sleep_mode_enabled = 1 },
         #else
             .sleep_mode = { .sleep_mode_enabled = 0 },

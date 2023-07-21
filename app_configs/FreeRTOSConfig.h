@@ -164,7 +164,8 @@ standard names. */
  */
 #if defined(CY_CFG_PWR_SYS_IDLE_MODE) && \
     ((CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_SLEEP) || \
-     (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP))
+     (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP)|| \
+     (CY_CFG_PWR_SYS_IDLE_MODE == CY_CFG_PWR_MODE_DEEPSLEEP_RAM))
 
 /* Enable low power tickless functionality. The RTOS abstraction library
  * provides the compatible implementation of the vApplicationSleep hook:

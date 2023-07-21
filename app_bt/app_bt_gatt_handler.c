@@ -6,7 +6,7 @@
 *              Server callbacks.
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -189,7 +189,7 @@ app_bt_gatt_event_handler(wiced_bt_gatt_evt_t event,
 
         p_event_data->buffer_request.buffer.p_app_rsp_buffer =
                 app_alloc_buffer(p_event_data->buffer_request.len_requested);
-        p_event_data->buffer_request.buffer.p_app_ctxt = (void *)app_free_buffer;
+        p_event_data->buffer_request.buffer.p_app_ctxt = (void *)&app_free_buffer;
         break;
 
     case GATT_APP_BUFFER_TRANSMITTED_EVT:
@@ -237,11 +237,34 @@ wiced_bt_gatt_status_t
 app_gatt_connection_status_change_cb(wiced_bt_gatt_connection_status_t *p_conn_status)
 {
 
-    wiced_result_t gatt_status = WICED_BT_GATT_SUCCESS;
+    wiced_bt_gatt_status_t gatt_status = WICED_BT_GATT_SUCCESS;
 
     if ((p_conn_status->connected) && (0 == app_bt_conn_id))
     {
         BTM_SetDataChannelPDULength(p_conn_status->bd_addr,251);
+
+#ifdef ATV_ADPCM
+        //configure ATT MTU size with peer device
+        wiced_bt_gatt_status_t mtu_status ;
+        printf("Configuring MTU\r\n");
+        mtu_status = wiced_bt_gatt_client_configure_mtu(app_bt_conn_id,
+                                                        preferred_mtu_size);
+        if(mtu_status != WICED_BT_GATT_SUCCESS)
+        {
+            printf("MTU Exchange Failed %d\r\n ", mtu_status);
+        }
+
+        printf("send conn param request 24 24 6 5\r\n");
+        if (0 != wiced_bt_l2cap_update_ble_conn_params(
+                peer_bd_addr,
+                MIN_CI,
+                MAX_CI,
+                6,
+                SUPERVISION_TO))
+        {
+            printf("Connection parameter update successful\r\n");
+        }
+#endif
 
         /* Device has connected */
         printf("Connected to BDA:\r\n");
@@ -473,7 +496,7 @@ app_gatt_attr_read_handler( uint16_t conn_id,
                                                                 0,
                                                                 NULL,
                                                                 NULL);
-        gatt_status = WICED_BT_GATT_SUCCESS;
+        // gatt_status = WICED_BT_GATT_SUCCESS;
     }
     else if( valid_end_handle > p_read_req->handle )
     {
@@ -514,7 +537,7 @@ app_gatt_read_by_type_handler(  uint16_t conn_id,
     uint8_t     *p_rsp = app_alloc_buffer(len_requested);
     uint8_t     pair_len = 0;
     uint8_t     index = 0;
-    int         used = 0;
+    uint16_t    used = 0;
     int         filled = 0;
 
     if (p_rsp == NULL)
@@ -583,7 +606,7 @@ app_gatt_read_by_type_handler(  uint16_t conn_id,
                                                 pair_len,
                                                 used,
                                                 p_rsp,
-                            (wiced_bt_gatt_app_context_t)app_free_buffer);
+                            (wiced_bt_gatt_app_context_t)&app_free_buffer);
 
     return WICED_BT_GATT_SUCCESS;
 
@@ -738,17 +761,13 @@ wiced_bt_gatt_status_t app_set_gatt_attr_value(uint8_t attr_handle_index,
                     app_modify_cccd_in_nv_storage(
                         app_gatt_db_ext_attr_tbl[attr_handle_index].handle,
                         p_val);
-                     printf("send conn param request\r\n");
-                    if (0 == wiced_bt_l2cap_update_ble_conn_params(
+                    printf("send conn param request 24 24 33 5\r\n");
+                    if (0 != wiced_bt_l2cap_update_ble_conn_params(
                             peer_bd_addr,
                             MIN_CI,
                             MAX_CI,
                             SLAVE_LATENCY,
                             SUPERVISION_TO))
-                    {
-                        printf("Connection parameter update failed\r\n");
-                    }
-                    else
                     {
                         printf("Connection parameter update successful\r\n");
                     }
@@ -808,11 +827,11 @@ uint8_t app_get_attr_index_by_handle(uint16_t attr_handle)
 
     while(left <= right)
     {
-        uint16_t mid = left + (right - left)/2;
+        uint16_t mid = left + (uint16_t)(right - left)/2;
 
         if(app_gatt_db_ext_attr_tbl[mid].handle == attr_handle)
         {
-            return mid;
+            return (uint8_t)mid;
         }
 
         if(app_gatt_db_ext_attr_tbl[mid].handle < attr_handle)

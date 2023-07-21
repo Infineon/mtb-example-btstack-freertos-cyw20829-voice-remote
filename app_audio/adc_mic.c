@@ -306,6 +306,9 @@ static void adcmic_dma_configure(void)
         /* Disable DC monitoring and Init the ADCMic for Analog Mic */
         adc_dc_monitoring_enable(0);
 
+        Cy_TrigMux_Connect(TRIG_IN_MUX_0_ADCMIC_DATA_AVAIL, TRIG_OUT_MUX_0_PDMA0_TR_IN0, false, TRIGGER_TYPE_EDGE);
+        Cy_TrigMux_Connect(TRIG_IN_MUX_0_PDMA0_TR_OUT0, TRIG_OUT_MUX_0_PDMA0_TR_IN1, false, TRIGGER_TYPE_EDGE);
+
         adcmic_dma_configure();
 
         /* DMA channel for ADC Trigger is configured  */

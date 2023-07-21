@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -495,7 +495,7 @@ cy_rslt_t app_bt_read_local_identity_keys(void)
 cy_rslt_t app_bt_update_cccd(uint16_t cccd, uint8_t index)
 {
         cy_rslt_t rslt = CY_RSLT_TYPE_ERROR;
-        bondinfo.cccd_flags[index]= cccd;
+        bondinfo.cccd_flags[index]= (uint8_t)cccd;
         printf("Updating CCCD Value to: %d \r\n",cccd);
         rslt = mtb_kvstore_write(&kvstore_obj,
                                 "bondinfo",

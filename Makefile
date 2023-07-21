@@ -114,29 +114,28 @@ PDM_MIC = 2
 ENABLE_RED_LED = 0
 ENABLE_GREEN_LED = 0
 
-# To Power Off the Flash when not active. This requires a special recovery procedure to download a new firmware if enabled.
-FLASH_POWER_DOWN_ENABLE = 1
+ENABLE_BT_SPY = 0
 
 # The following variable controls which codec is used. And BT-Configurator opens
 # the respective design.cybt. Make clean will not delete the GeneratedSource
 # directory. Needs to be cleaned manually.
 ENABLE_CODEC = $(ATV_ADPCM)
 
-ifeq ($(TARGET), $(filter $(TARGET), APP_CYW920829M2EVB-01))
+ifeq ($(TARGET), $(filter $(TARGET), APP_CYW920829M2EVK-02))
 CY_IGNORE+=./app_hw/app_hw_keyscan.c ./app_hw/app_hw_batmon.c
 ENABLE_MIC = $(PDM_MIC)
 ENABLE_RED_LED = 0
 ENABLE_GREEN_LED = 0
 
 ifeq ($(ENABLE_MIC) , $(ANALOG_MIC))
-$(error CYW920829M2EVB-01 BLE Remote app support digital mic only. )
+$(error CYW920829M2EVK-02 BLE Remote app support digital mic only. )
 endif
 
 endif
 
 ifeq ($(TARGET), $(filter $(TARGET), APP_CYW920829-VR))
 DEFINES+=VOICE_REMOTE
-CY_IGNORE+=./app_m2_evb
+CY_IGNORE+=./app_m2_evk
 ENABLE_MIC = $(ANALOG_MIC)
 
 ifeq ($(ENABLE_RED_LED),1)
@@ -145,10 +144,6 @@ endif
 
 ifeq ($(ENABLE_GREEN_LED),1)
 DEFINES+=GREEN_LED_ENABLE
-endif
-
-ifeq ($(FLASH_POWER_DOWN_ENABLE),1)
-DEFINES+=FLASH_POWER_DOWN
 endif
 
 ifneq ($(ENABLE_RED_LED),1)
@@ -193,6 +188,9 @@ endif
 
 CY_IGNORE+=./templates
 
+ifeq ($(ENABLE_BT_SPY),1)
+DEFINES+=ENABLE_BT_SPY_LOG DEBUG_UART_BAUDRATE=3000000
+endif
 # Select softfp or hardfp floating point. Default is softfp.
 VFP_SELECT=
 

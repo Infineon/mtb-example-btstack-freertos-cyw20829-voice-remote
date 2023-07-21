@@ -8,7 +8,7 @@
 *
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -45,7 +45,5 @@
 #include "mtb_kvstore.h"
 
 void app_flash_bd_init(mtb_kvstore_bd_t* device);
-void flash_memory_power_down();
-void flash_memory_power_up();
 
 #endif //__APP_SERIAL_FLASH_H_

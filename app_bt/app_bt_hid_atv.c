@@ -8,7 +8,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -51,6 +51,7 @@
 #include "app_hw_handler.h"
 #include "cycfg_gatt_db.h"
 #include "audio.h"
+#include "wiced_bt_l2c.h"
 
 /*******************************************************************************
 *        Macro Definitions
@@ -204,13 +205,23 @@ void app_send_report(uint8_t keyCode, uint8_t upDownFlag)
 
                 if(KC_MIC == keyCode)
                 {
+                    printf("send conn param request 16 16 10 5\r\n");
+                    if (0 != wiced_bt_l2cap_update_ble_conn_params(
+                            peer_bd_addr,
+                            16,
+                            16,
+                            10,
+                            SUPERVISION_TO))
+                    {
+                        printf("Connection parameter update successful\r\n");
+                    }
                     app_atv_audio_cmd_dispatcher(ATV_VOICE_SERVICE_START_SEARCH);
                     if (pdPASS != xTimerStart(audio_timer_h, 10u))
                     {
                         printf("Failed to start audio timer!\r\n");
                         CY_ASSERT(0);
                     }
-                    printf("GATT Bearer MTU: %d \r\n",wiced_bt_gatt_get_bearer_mtu(0));
+                    // printf("GATT Bearer MTU: %d \r\n",wiced_bt_gatt_get_bearer_mtu(0));
                     printf("audio timer started!\r\n");
                 }
             }
@@ -449,6 +460,17 @@ static void app_stop_adpcm_transfer(void)
 {
 
     send_stop_streaming_msg();
+
+    printf("send conn param request 24 24 33 5\r\n");
+    if (0 != wiced_bt_l2cap_update_ble_conn_params(
+            peer_bd_addr,
+            MIN_CI,
+            MAX_CI,
+            SLAVE_LATENCY,
+            SUPERVISION_TO))
+    {
+        printf("Connection parameter update successful\r\n");
+    }
 
     /* Kill the active timer as per the ATV specification */
     app_check_n_kill_timer();

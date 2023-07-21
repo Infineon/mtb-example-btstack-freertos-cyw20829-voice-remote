@@ -47,6 +47,7 @@
 #include "cyhal.h"
 #endif
 #include "app_hw_keyscan.h"
+#include "cybsp_smif_init.h"
 // This is included to allow the user to control the idle task behavior via the configurator
 // System->Power->RTOS->System Idle Power Mode setting.
 #if defined(COMPONENT_BSP_DESIGN_MODUS) || defined(COMPONENT_CUSTOM_DESIGN_MODUS)
@@ -69,12 +70,12 @@ cy_stc_syspm_callback_params_t syspm_cpu_sleep_params;
  ******************************************************************************/
 #ifndef PDM_MIC
 cy_en_syspm_status_t
-syspm_cpu_sleep_cb(cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_cpu_sleep_cb(cy_stc_syspm_callback_params_t *callbackParams,
                               cy_en_syspm_callback_mode_t mode);
 
 cy_stc_syspm_callback_t syspm_cpu_sleep_cb_handler =
 {
-    syspm_cpu_sleep_cb,
+    app_syspm_cpu_sleep_cb,
     CY_SYSPM_SLEEP,
     0u,
     &syspm_cpu_sleep_params,
@@ -85,7 +86,7 @@ cy_stc_syspm_callback_t syspm_cpu_sleep_cb_handler =
 
 /**
  * Function Name:
- * syspm_cpu_sleep_cb
+ * app_syspm_cpu_sleep_cb
  *
  * Function Description:
  * @brief Cpu Sleep Callback Function
@@ -97,7 +98,7 @@ cy_stc_syspm_callback_t syspm_cpu_sleep_cb_handler =
  */
 CY_SECTION_RAMFUNC_BEGIN
 cy_en_syspm_status_t
-syspm_cpu_sleep_cb( cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_cpu_sleep_cb( cy_stc_syspm_callback_params_t *callbackParams,
                 cy_en_syspm_callback_mode_t mode)
 {
     cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
@@ -121,7 +122,7 @@ syspm_cpu_sleep_cb( cy_stc_syspm_callback_params_t *callbackParams,
         /* Performs the actions to be done before entering the low power mode */
         {
             //Disable SMIF
-            smif_disable();
+            cybsp_smif_disable();
 
             /* Reduce Frequency to save power in CPU Sleep */
             Cy_SysClk_FllDisable();
@@ -137,9 +138,9 @@ syspm_cpu_sleep_cb( cy_stc_syspm_callback_params_t *callbackParams,
             Cy_SysClk_FllEnable(2000UL);
             Cy_SysClk_ClkHfSetDivider(0, CY_SYSCLK_CLKHF_NO_DIVIDE );
             Cy_SysClk_ClkHfSetDivider(1, CY_SYSCLK_CLKHF_NO_DIVIDE );
+            cybsp_smif_enable();
 
-            //Enable SMIF
-            smif_enable();
+        
             retVal = CY_SYSPM_SUCCESS;
         }
         break;

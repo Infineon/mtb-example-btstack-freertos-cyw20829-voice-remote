@@ -48,7 +48,7 @@
 #include "timers.h"
 #include "semphr.h"
 #include "app_hw_button.h"
-#include "app_m2_evb_batmon.h"
+#include "app_m2_evk_batmon.h"
 #include "app_bt_hid.h"
 #include "cyhal_syspm.h"
 #include "app_hw_serial_flash.h"

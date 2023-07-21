@@ -7,7 +7,7 @@
 * Related Document: See README.md
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -263,30 +263,6 @@ void app_bt_advert_state_handler(wiced_bt_ble_advert_mode_t current_adv_mode)
             break;
     }
 
-}
-
-/**
- *  Function name:
- *  app_bt_start_adv_known_host
- *
- *  Function Description:
- *  @brief This Function starts directed Bluetooth advertisement
- *
- *  @param    void
- *
- *  @return    void
- */
-void app_bt_start_adv_known_host(void)
-{
-    wiced_bt_device_address_ptr_t peer_bd_addr_p = peer_bd_addr;
-    wiced_result_t adv_rslt = wiced_bt_start_advertisements(BTM_BLE_ADVERT_DIRECTED_HIGH,
-                                      BLE_ADDR_PUBLIC,
-                                      peer_bd_addr_p);
-    /* Start directed LE Advertisements */
-    if(WICED_SUCCESS != adv_rslt)
-    {
-        printf("Starting Directed Bluetooth LE advertisements Failed Reason %d \r\n", adv_rslt);
-    }
 }
 
 /**

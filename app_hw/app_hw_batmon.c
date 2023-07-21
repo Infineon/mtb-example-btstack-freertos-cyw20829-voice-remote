@@ -54,6 +54,7 @@
 #include "app_hw_serial_flash.h"
 #include "app_hw_keyscan.h"
 #include "app_hw_handler.h"
+#include "cybsp_smif_init.h"
 
 /*******************************************************************************
 *                               Macro Definitions
@@ -66,6 +67,7 @@
 #define BATT_LVL_100_MV                     (3000)
 #define BATT_CAP_MV                         (BATT_LVL_100_MV - BATT_LVL_0_MV)
 #define BATT_MV_1_CAP                       (BATT_CAP_MV/100)   //MV for 1 percent capacity of Battery Level
+#define FLASH_POWER_DOWN_CMD                (0xB9)
 
 /*******************************************************************************
 *                               Global Variables
@@ -77,6 +79,7 @@ cy_stc_syspm_callback_params_t syspm_batmon_hb_params;
 
 /* Initial State of ADC driver set to IDLE */
 volatile adc_driver_state_t adc_drv_state = ADC_IDLE;
+extern cy_stc_smif_context_t cybsp_smif_context;
 
 static TimerHandle_t batmon_timer_h;
 static TaskHandle_t batmon_task_h;
@@ -92,12 +95,12 @@ const cy_stc_sysint_t ADCMIC_IRQ_cfg = {
  *                              FUNCTION DECLARATIONS
  ******************************************************************************/
 cy_en_syspm_status_t
-syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
                               cy_en_syspm_callback_mode_t mode);
 
 cy_stc_syspm_callback_t syspm_batmon_hb_cb_handler =
 {
-    syspm_batmon_hb_cb,
+    app_syspm_batmon_hb_cb,
     CY_SYSPM_HIBERNATE,
     0u,
     &syspm_batmon_hb_params,
@@ -477,7 +480,7 @@ void batmon_task_init(void)
 
 /**
  * Function Name:
- * syspm_batmon_hb_cb
+ * app_syspm_batmon_hb_cb
  *
  * Function Description:
  * @brief Hibernate Callback Function
@@ -489,7 +492,7 @@ void batmon_task_init(void)
  */
 CY_SECTION_RAMFUNC_BEGIN
 cy_en_syspm_status_t
-syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
+app_syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
                               cy_en_syspm_callback_mode_t mode)
 {
     cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
@@ -512,11 +515,11 @@ syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
         case CY_SYSPM_BEFORE_TRANSITION:
         /* Performs the actions to be done before entering the low power mode */
         {
-#ifdef FLASH_POWER_DOWN
-            flash_memory_power_down();
-#endif
-            // Disable SMIF
-            smif_disable();
+            Cy_SMIF_TransmitCommand(SMIF0, FLASH_POWER_DOWN_CMD, CY_SMIF_WIDTH_SINGLE, NULL, CY_SMIF_CMD_WITHOUT_PARAM,
+                                            CY_SMIF_WIDTH_NA, CY_SMIF_SLAVE_SELECT_0, CY_SMIF_TX_LAST_BYTE,
+                                            &cybsp_smif_context);
+
+            cybsp_smif_disable();
             retVal = CY_SYSPM_SUCCESS;
         }
         break;

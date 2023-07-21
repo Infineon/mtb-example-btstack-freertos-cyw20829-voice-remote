@@ -5,7 +5,7 @@
 *              necessary for developing Keyscan use cases.
 *
 *******************************************************************************
-* Copyright 2022, Cypress Semiconductor Corporation (an Infineon company) or
+* Copyright 2022-2023, Cypress Semiconductor Corporation (an Infineon company) or
 * an affiliate of Cypress Semiconductor Corporation.  All rights reserved.
 *
 * This software, including source code, documentation and related
@@ -65,8 +65,7 @@ typedef enum app_keyscan_status_t
  ******************************************************************************/
 
 void keyscan_task(void *args);
-void smif_disable();
-void smif_enable();
 void keyscan_task_init(void);
+void cyabs_rtos_enter_dsram(void);
 
 #endif
