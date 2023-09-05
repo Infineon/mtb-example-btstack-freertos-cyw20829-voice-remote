@@ -67,19 +67,16 @@
 #define BATT_LVL_100_MV                     (3000)
 #define BATT_CAP_MV                         (BATT_LVL_100_MV - BATT_LVL_0_MV)
 #define BATT_MV_1_CAP                       (BATT_CAP_MV/100)   //MV for 1 percent capacity of Battery Level
-#define FLASH_POWER_DOWN_CMD                (0xB9)
 
 /*******************************************************************************
 *                               Global Variables
 *******************************************************************************/
-uint16_t batmon_samples[NO_OF_DC_SAMPLES];
+int16_t batmon_samples[NO_OF_DC_SAMPLES];
 uint8_t dc_sample_cnt = 0;
-uint32_t batmon_dc_avg = 0;
-cy_stc_syspm_callback_params_t syspm_batmon_hb_params;
+int32_t batmon_dc_avg = 0;
 
 /* Initial State of ADC driver set to IDLE */
 volatile adc_driver_state_t adc_drv_state = ADC_IDLE;
-extern cy_stc_smif_context_t cybsp_smif_context;
 
 static TimerHandle_t batmon_timer_h;
 static TaskHandle_t batmon_task_h;
@@ -94,20 +91,6 @@ const cy_stc_sysint_t ADCMIC_IRQ_cfg = {
 /*******************************************************************************
  *                              FUNCTION DECLARATIONS
  ******************************************************************************/
-cy_en_syspm_status_t
-app_syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
-                              cy_en_syspm_callback_mode_t mode);
-
-cy_stc_syspm_callback_t syspm_batmon_hb_cb_handler =
-{
-    app_syspm_batmon_hb_cb,
-    CY_SYSPM_HIBERNATE,
-    0u,
-    &syspm_batmon_hb_params,
-    NULL,
-    NULL,
-    255
-};
 
 /******************************************************************************
  *                          Function Definitions
@@ -323,7 +306,6 @@ static void batmon_init(void)
     NVIC_ClearPendingIRQ(ADCMIC_IRQ_cfg.intrSrc);
     NVIC_EnableIRQ(ADCMIC_IRQ_cfg.intrSrc);
 
-    Cy_SysPm_RegisterCallback(&syspm_batmon_hb_cb_handler);
     /* Create a Periodic timer for Battery Monitoring */
     batmon_timer_h = xTimerCreate("Battery Monitoring Timer",
                                 BATMON_TIMEOUT_IN_MS,
@@ -371,6 +353,7 @@ static void send_batmon_msg_to_hid_msg_q(uint8_t batt_level)
     struct hid_rpt_msg batmon_msg;
     batmon_msg.msg_type = BATT_MSG_TYPE;
     batmon_msg.data.batt_level = batt_level;
+    printf("The battery level percentage is %u \r\n",batt_level);
     if( pdPASS != xQueueSend( hid_rpt_q, &batmon_msg, TICKS_TO_WAIT) )
     {
         printf("Failed to send msg from BM to HID rpt Queue\r\n");
@@ -395,7 +378,7 @@ static void batmon_task(void *arg)
 {
     uint32_t ulNotifiedValue;
     int i;
-    uint16 batt_level_mv;
+    int16_t batt_level_mv;
     uint8_t batt_cap, batt_cap_prev = 100;
 
     batmon_init();
@@ -414,7 +397,7 @@ static void batmon_task(void *arg)
         batmon_dc_avg = batmon_dc_avg/NO_OF_DC_SAMPLES;
 
         /* get the DC data to MV and convert it ot battery capacity */
-        batt_level_mv = Cy_ADCMic_CountsTo_mVolts((uint16_t)batmon_dc_avg, adcmic_0_config.dcConfig->context );
+        batt_level_mv = Cy_ADCMic_CountsTo_mVolts((int16_t)batmon_dc_avg, adcmic_0_config.dcConfig->context );
         if(batt_level_mv >= BATT_LVL_100_MV)
         {
             batt_cap = 100;
@@ -477,59 +460,5 @@ void batmon_task_init(void)
     }
 
 }
-
-/**
- * Function Name:
- * app_syspm_batmon_hb_cb
- *
- * Function Description:
- * @brief Hibernate Callback Function
- *
- * @param callbackParams
- * @param mode
- *
- * @return cy_en_syspm_status_t
- */
-CY_SECTION_RAMFUNC_BEGIN
-cy_en_syspm_status_t
-app_syspm_batmon_hb_cb(cy_stc_syspm_callback_params_t *callbackParams,
-                              cy_en_syspm_callback_mode_t mode)
-{
-    cy_en_syspm_status_t retVal = CY_SYSPM_FAIL;
-    CY_UNUSED_PARAMETER(callbackParams);
-
-    switch(mode)
-    {
-        case CY_SYSPM_CHECK_READY:
-        {
-            retVal = CY_SYSPM_SUCCESS;
-        }
-        break;
-
-        case CY_SYSPM_CHECK_FAIL:
-        {
-            retVal = CY_SYSPM_SUCCESS;
-        }
-        break;
-
-        case CY_SYSPM_BEFORE_TRANSITION:
-        /* Performs the actions to be done before entering the low power mode */
-        {
-            Cy_SMIF_TransmitCommand(SMIF0, FLASH_POWER_DOWN_CMD, CY_SMIF_WIDTH_SINGLE, NULL, CY_SMIF_CMD_WITHOUT_PARAM,
-                                            CY_SMIF_WIDTH_NA, CY_SMIF_SLAVE_SELECT_0, CY_SMIF_TX_LAST_BYTE,
-                                            &cybsp_smif_context);
-
-            cybsp_smif_disable();
-            retVal = CY_SYSPM_SUCCESS;
-        }
-        break;
-
-        default:
-            break;
-    }
-
-    return retVal;
-}
-CY_SECTION_RAMFUNC_END
 
 /* [] END OF FILE */

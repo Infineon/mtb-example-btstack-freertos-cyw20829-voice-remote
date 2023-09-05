@@ -46,9 +46,12 @@
 #include "app_hw_keyscan.h"
 #include "app_hw_gpio.h"
 #include "app_bt_hid.h"
-#include "cy_retarget_io.h"
 #include "cyabs_rtos_dsram.h"
-
+#ifdef ENABLE_BT_SPY_LOG
+#include "cybt_debug_uart.h"
+#else
+#include "cy_retarget_io.h"
+#endif
 /*******************************************************************************
  *                              Macro Definitions
  ******************************************************************************/
@@ -92,6 +95,10 @@ static void app_keyscan_handler_init(void);
 static int app_configure_keyscan(void);
 
 static void app_key_detected_callback(void);
+
+#ifdef ENABLE_BT_SPY_LOG
+extern void app_enable_bt_spy();
+#endif
 
 cy_en_syspm_status_t
 app_syspm_ks_ds_cb(cy_stc_syspm_callback_params_t *callbackParams,
@@ -350,9 +357,20 @@ app_syspm_uart_dsram_cb( cy_stc_syspm_callback_params_t *callbackParams,
         {
             if(Cy_SysLib_IsDSRAMWarmBootEntry())
             {
+#ifndef ENABLE_BT_SPY_LOG
+#ifndef NO_LOGGING
             cy_retarget_io_deinit();
             cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,115200);
             Cy_GPIO_SetHSIOM(GPIO_PRT3, 2, HSIOM_SEL_GPIO);
+#endif
+#else
+#ifndef NO_LOGGING
+            cybt_debug_uart_deinit();
+            app_enable_bt_spy();
+
+#endif
+#endif
+
             }
 
             retVal = CY_SYSPM_SUCCESS;
@@ -688,11 +706,3 @@ void keyscan_task_init(void)
         printf("Keyscan Task creation failed");
     }
 }
-
-CY_SECTION_RAMFUNC_BEGIN
-void cyabs_rtos_enter_dsram(void)
-{
-    vStoreDSRAMContextWithWFI();
-}
-CY_SECTION_RAMFUNC_END
-

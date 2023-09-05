@@ -128,6 +128,20 @@ const cybt_platform_config_t bt_platform_cfg_settings =
 /* Function to initialize the various tasks for the Bluetooth LE Remote application */
 static void remote_tasks_init(void);
 
+#ifdef ENABLE_BT_SPY_LOG
+void app_enable_bt_spy()
+{
+    cybt_debug_uart_config_t config = {
+        .uart_tx_pin    = CYBSP_DEBUG_UART_TX,
+        .uart_rx_pin    = CYBSP_DEBUG_UART_RX,
+        .uart_cts_pin   = CYBSP_DEBUG_UART_CTS,
+        .uart_rts_pin   = CYBSP_DEBUG_UART_RTS,
+        .baud_rate      = DEBUG_UART_BAUDRATE,
+        .flow_control   = TRUE };
+    cybt_debug_uart_init(&config, NULL);
+}
+#endif
+
 /******************************************************************************
  *                          Function Definitions
  ******************************************************************************/
@@ -194,19 +208,14 @@ static void remote_tasks_init(void)
     // TODO Separate HAL/PDL and RTOS Task/Queue Initialisation
 
 #ifdef ENABLE_BT_SPY_LOG
-    cybt_debug_uart_config_t config = {
-        .uart_tx_pin    = CYBSP_DEBUG_UART_TX,
-        .uart_rx_pin    = CYBSP_DEBUG_UART_RX,
-        .uart_cts_pin   = CYBSP_DEBUG_UART_CTS,
-        .uart_rts_pin   = CYBSP_DEBUG_UART_RTS,
-        .baud_rate      = DEBUG_UART_BAUDRATE,
-        .flow_control   = TRUE };
-    cybt_debug_uart_init(&config, NULL);
+    app_enable_bt_spy();
 #else
+#ifndef NO_LOGGING
     /* Initialize retarget-io to use the debug UART port */
     cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX,\
                         CY_RETARGET_IO_BAUDRATE);
     Cy_GPIO_SetHSIOM(GPIO_PRT3, 2, HSIOM_SEL_GPIO);
+#endif
 #endif
     cybt_platform_set_trace_level(CYBT_TRACE_ID_STACK, CYBT_TRACE_ID_MAX);
 

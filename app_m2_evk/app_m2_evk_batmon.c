@@ -7,7 +7,7 @@
 * Related Document: See Readme.md
 *
 *******************************************************************************
-* (c) 2020, Cypress Semiconductor Corporation. All rights reserved.
+* (c) 2022, Cypress Semiconductor Corporation. All rights reserved.
 *******************************************************************************
 * This software, including source code, documentation and related materials
 * ("Software"), is owned by Cypress Semiconductor Corporation or one of its
@@ -69,7 +69,7 @@
 /*******************************************************************************
 *                               Global Variables
 *******************************************************************************/
-uint16_t batmon_samples[NO_OF_DC_SAMPLES];
+int16_t batmon_samples[NO_OF_DC_SAMPLES];
 uint8_t dc_sample_cnt = 0;
 uint32_t batmon_dc_avg = 0;
 
@@ -96,8 +96,10 @@ const cy_stc_sysint_t ADCMIC_IRQ_cfg = {
  ******************************************************************************/
 
 /**
- * Function Name: adc_dc_cap_start
+ * Function Name:
+ * adc_dc_cap_start
  *
+ * Function Description:
  * @brief It enable the ADC DC monitoring.
  *
  * @param void
@@ -136,8 +138,10 @@ static void adc_dc_cap_start(void)
 }
 
 /**
- * Function Name: batmon_timer_cb
+ * Function Name:
+ * batmon_timer_cb
  *
+ * Function Description:
  * @brief Timer cb to start ADC DC monitoring.
  *
  * @param cb_param: Argument to cb
@@ -154,8 +158,10 @@ static void batmon_timer_cb(TimerHandle_t cb_params)
 #ifndef PDM_MIC
 
 /**
- * Function Name: adc_dc_cap_stop
+ * Function Name:
+ * adc_dc_cap_stop
  *
+ * Function Description:
  * @brief Stops the ADC DC monitoring.
  *
  * @param void
@@ -176,10 +182,11 @@ static void adc_dc_cap_stop(void)
 }
 
 /**
- * Function Name: adc_dc_monitoring_enable
+ * Function Name:
+ * adc_dc_monitoring_enable
  *
- * @brief
- *  Function to Enable/Disable ADC DC monitoring
+ * Function Description:
+ * @brief Function to Enable/Disable ADC DC monitoring
  *
  * @param en Enable/Disable
  *
@@ -227,8 +234,10 @@ void adc_dc_monitoring_enable(uint8_t en)
 #endif
 
 /**
- * Function Name: adcmic_dc_intr_handler
+ * Function Name:
+ * adcmic_dc_intr_handler
  *
+ * Function Description:
  * @brief
  *  ADC DC Measurement ISR handler. On Every ISR, one DC measurement is read and
  *  stored. Once the Number of DC samples are read for averaging, It sends
@@ -277,8 +286,10 @@ static void adcmic_dc_intr_handler(void)
 }
 
 /**
- * Function Name: pdm_pcm_capture_start
+ * Function Name:
+ * pdm_pcm_capture_start
  *
+ * Function Description:
  * @brief
  *  Start/Stops PDM/PCM to capture audio data
  *
@@ -325,8 +336,10 @@ static void batmon_init(void)
 }
 
 /**
- * Function Name: send_batmon_msg_to_hid_msg_q
+ * Function Name:
+ * send_batmon_msg_to_hid_msg_q
  *
+ * Function Description:
  * @brief
  *  Sends battery capacity level to HID queue
  *
@@ -339,6 +352,7 @@ static void send_batmon_msg_to_hid_msg_q(uint8_t batt_level)
     struct hid_rpt_msg batmon_msg;
     batmon_msg.msg_type = BATT_MSG_TYPE;
     batmon_msg.data.batt_level = batt_level;
+    printf("The battery level percentage is %u \r\n",batt_level);
     if( pdPASS != xQueueSend( hid_rpt_q, &batmon_msg, TICKS_TO_WAIT) )
     {
         printf("Failed to send msg from BM to HID rpt Queue\r\n");
@@ -347,8 +361,10 @@ static void send_batmon_msg_to_hid_msg_q(uint8_t batt_level)
 }
 
 /**
- * Function Name: batmon_task
+ * Function Name:
+ * batmon_task
  *
+ * Function Description:
  * @brief
  *  Battery Monitoring Task Handler: This task function creates timer, mutex and
  *  processes the ADC measurement data, converts it to the battery capacity level
@@ -361,8 +377,8 @@ static void batmon_task(void *arg)
 {
     uint32_t ulNotifiedValue;
     int i;
-    uint16 batt_level_mv;
-    uint8_t batt_cap, batt_cap_prev = 100;
+    int16_t batt_level_mv;
+    int16_t batt_cap, batt_cap_prev = 100;
 
     batmon_init();
 
@@ -380,7 +396,7 @@ static void batmon_task(void *arg)
         batmon_dc_avg = batmon_dc_avg/NO_OF_DC_SAMPLES;
 
         /* get the DC data to MV and convert it ot battery capacity */
-        batt_level_mv = Cy_ADCMic_CountsTo_mVolts((uint16_t)batmon_dc_avg, adcmic_0_config.dcConfig->context );
+        batt_level_mv = Cy_ADCMic_CountsTo_mVolts((uint32_t)batmon_dc_avg, adcmic_0_config.dcConfig->context );
         if(batt_level_mv >= BATT_LVL_100_MV)
         {
             batt_cap = 100;
@@ -419,8 +435,10 @@ static void batmon_task(void *arg)
 }
 
 /**
- * Function Name: batmon_task_init
+ * Function Name:
+ * batmon_task_init
  *
+ * Function Description:
  * @brief This function creates task for Battery Monitoring
  *
  * @param void

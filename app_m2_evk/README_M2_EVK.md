@@ -8,7 +8,7 @@ This Solution demo demonstrates the implementation of a AIROC™ CYW20829 BLE Re
 
 ## Requirements
 
-- [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.0 or later (tested with v3.0)
+- [ModusToolbox&trade; software](https://www.infineon.com/modustoolbox) v3.1 or later (tested with v3.1)
 - Programming Language: C
 - Board Support Package(BSP) minimum required version:
   - CYW920829M2EVK-02 : v1.0.0

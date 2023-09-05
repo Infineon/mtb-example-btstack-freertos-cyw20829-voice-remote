@@ -8,9 +8,9 @@ This Solution demo demonstrates the implementation of a AIROC™ CYW20829 Voice 
 
 ## Requirements
 
-- [ModusToolbox™ software](https://www.infineon.com/modustoolbox) v3.0 or later (tested with v3.0)
+- [ModusToolbox™ software](https://www.infineon.com/modustoolbox) v3.1 or later (tested with v3.1)
 - Programming Language: C
-- BSP: [CYW920829-VR](./README.md) , [CYW920829M2EVK-02](./app_m2_evk/README_M2_EVK.md)
+- BSP: [CYW920829-VR](./README.md) , [CYW920829M2EVK-02](./app_m2_evk/README_M2_EVK.md) v 1.0.1
 - Associated Parts: [AIROC&trade; CYW20829 Bluetooth&reg; LE SoC](https://www.infineon.com/cms/en/product/promopages/airoc20829)
 - CY8CKIT-005 MiniProg 4
 
@@ -330,6 +330,7 @@ Document Title: CE235151 - AIROC LE CYW20829 Voice Remote
 | 1.0.1   | Beta Release of Voice Remote Application. This version is not meant for production. |
 | 2.0.0   | Beta Release<br> - Major update to ModusToolbox v3.0 <br>- Added support for CYW920829M2EVB-01 <br> - Reduced overall power consumption |
 | 2.1.0   | Beta Release<br> - Removed CYW920829M2EVB-01 from supported kits <br>- Added support for CYW920829M2EVK-02 |
+| 2.2.0   | Added DSRAM as idle power mode |
 
 ------
 
