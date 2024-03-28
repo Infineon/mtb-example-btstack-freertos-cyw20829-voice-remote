@@ -227,6 +227,9 @@ PREBUILD=
 # Custom post-build commands to run.
 POSTBUILD=
 
+# Supported Compilers
+CY_TOOLCHAIN_ARM_NOT_SUPPORTED = true
+CY_TOOLCHAIN_IAR_NOT_SUPPORTED = true
 
 ################################################################################
 # Paths

@@ -331,6 +331,7 @@ Document Title: CE235151 - AIROC LE CYW20829 Voice Remote
 | 2.0.0   | Beta Release<br> - Major update to ModusToolbox v3.0 <br>- Added support for CYW920829M2EVB-01 <br> - Reduced overall power consumption |
 | 2.1.0   | Beta Release<br> - Removed CYW920829M2EVB-01 from supported kits <br>- Added support for CYW920829M2EVK-02 |
 | 2.2.0   | Added DSRAM as idle power mode |
+| 2.3.0   | Update list of supported compilers.|
 
 ------
 
